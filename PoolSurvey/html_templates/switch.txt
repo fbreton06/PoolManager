@@ -1,0 +1,110 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+		<title>Switch</title>
+		<link rel="stylesheet" href="style.css" type="text/css" />
+	</head>
+	<body>
+		<table style="width: 100%" border="0" cellpadding="1" cellspacing="1">
+		<tr>
+			<td style="text-align: center;">
+			<h1>Pool Survey: Mode switch</h1>
+			</td>
+		</tr>
+		</table>
+		<form method="post">
+			<input name="page" type="hidden" value="1" />
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td style="text-align: left;">
+				<input name="prev" type="image" src="RESPATHprev.png" value="Prev" />
+				</td>
+				<td></td>
+				<td style="text-align: right;">
+				<input name="next" type="image" src="RESPATHnext.png" value="Next" />
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Pump Mode</h2>
+				<select name="pump" onchange="this.form.submit()">
+				<option value="0" SELECTPUMP0>OFF</option>
+				<option value="2" SELECTPUMP2>AUTO</option>
+				<option value="1" SELECTPUMP1>ON</option>
+				</select>
+				</td>
+				<td></td>
+				<td style="text-align: left; vertical-align: center;">
+				<img src="RESPATHpump.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Robot Mode</h2>
+				<select name="robot" onchange="this.form.submit()">
+				<option value="0" SELECTROBOT0>OFF</option>
+				<option value="2" SELECTROBOT2>AUTO</option>
+				<option value="1" SELECTROBOT1>ON</option>
+				</select>
+				</td>
+				<td></td>
+				<td style="text-align: left; vertical-align: center;">
+				<img src="RESPATHrobot.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>PH Mode</h2>
+				<select name="ph" onchange="this.form.submit()">
+				<option value="0" SELECTPH0>OFF</option>
+				<option value="2" SELECTPH2>AUTO</option>
+				<option value="1" SELECTPH1>ON</option>
+				</select>
+				</td>
+				<td></td>
+				<td style="text-align: left; vertical-align: center;">
+				<img src="RESPATHdoseuse.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>ORP Mode</h2>
+				<select name="orp" onchange="this.form.submit()">
+				<option value="0" SELECTORP0>OFF</option>
+				<option value="2" SELECTORP2>AUTO</option>
+				<option value="1" SELECTORP1>ON</option>
+				</select>
+				</td>
+				<td></td>
+				<td style="text-align: left; vertical-align: center;">
+				<img src="RESPATHdoseuse.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Water filling Mode</h2>
+				<select name="filling" onchange="this.form.submit()">
+				<option value="0" SELECTFILLING0>OFF</option>
+				<option value="2" SELECTFILLING2>AUTO</option>
+				<option value="1" SELECTFILLING1>ON</option>
+				</select>
+				</td>
+				<td></td>
+				<td style="text-align: left; vertical-align: center;">
+				<img src="RESPATHrobinet.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Lights</h2>
+				</td>
+				<td></td>
+				<td style="text-align: left; vertical-align: center;">
+				<input name="light" type="image" src="LIGHTSWITCH" value="Light" />
+				</td>
+			</tr>
+			</table>
+		</form>
+	</body>
+</html>

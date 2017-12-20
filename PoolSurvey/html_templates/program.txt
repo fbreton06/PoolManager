@@ -1,0 +1,111 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+		<title>Programming</title>
+		<link rel="stylesheet" href="style.css" type="text/css" />
+	</head>
+	<script type="text/javascript">
+	function valid() {
+		element = document.getElementById("valid")
+		try {// IE support
+			element.click();
+		}catch(e) {// Firefox support
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+			element.dispatchEvent(evt); // Send click event on the given element
+		}
+	}
+	</script>
+	<body>
+		<table style="width: 100%" border="0" cellpadding="1" cellspacing="1">
+		<tr>
+			<td style="text-align: center;">
+			<h1>Pool Survey: Programming</h1>
+			</td>
+		</tr>
+		</table>
+		<form method="post">
+			<input name="page" type="hidden" value="2" />
+			<input id="valid" type="image" src="RESPATHhidden.png" value="0" />
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td style="text-align: left;">
+				<input name="prev" type="image" src="RESPATHprev.png" value="Prev" />
+				</td>
+				<td style="width: 10%;"></td>
+				<td style="text-align: right;">
+				<input name="next" type="image" src="RESPATHnext.png" value="Next" />
+				</td>
+			</tr>
+			</table>
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td></td>
+				<td style="text-align: right;">
+				<img src="RESPATHpump.png">
+				</td>
+				<td style="width: 50px;"></td>
+				<td style="text-align: left;">
+				<img src="RESPATHrobot.png">
+				</td>
+				<td></td>
+			</tr>
+			<tr>
+				<td></td>
+				<td style="text-align: right;">
+				<h2>Start</h2>
+				<select name="StartHr">
+				OPTIONHOUR
+				</select>
+				<select name="StartMn">
+				OPTIONMINUTE
+				</select>
+				</td>
+				<td style="width: 50px;"></td>
+				<td style="text-align: left;">
+				<h2>Stop</h2>
+				<select name="StopHr">
+				OPTIONHOUR
+				</select>
+				<select name="StopMn">
+				OPTIONMINUTE
+				</select>
+				</td>
+				<td></td>
+			</tr>
+			<tr>
+				<td style="text-align: right;">
+				<input name="pump+" value="+" type="submit" style="border: 1px solid ; width: 25px; height: 25px;" /><br><br>
+				<input name="pump-" value="-" type="submit" style="border: 1px solid ; width: 25px; height: 25px;" />
+				</td>
+				<td style="text-align: right; width: 100px;">
+				<select multiple="multiple" size="10" name="PumpList">
+					<optgroup label="Start : Stop"></optgroup>
+				</select>
+				</td>
+				<td style="width: 50px;"></td>
+				<td style="text-align: left; width: 100px;">
+				<select multiple="multiple" size="10" style="width: 100px;" name="RobotList">
+					<optgroup label="Start : Stop"></optgroup>
+				</select>
+				</td>
+				<td style="text-align: left;">
+				<input name="robot+" value="+" type="submit" style="border: 1px solid ; width: 25px; height: 25px;" /><br><br>
+				<input name="robot-" value="-" type="submit" style="border: 1px solid ; width: 25px; height: 25px;" />
+				</td>
+			</tr>
+			<tr>
+				<td></td>
+				<td style="text-align: center;">
+				<h2><input name="schedule" type="checkbox" SCHEDCHECK value="0" onchange="valid(); " />Automatic<br>scheduling</h2>
+				</td>
+				<td style="width: 50px;"></td>
+				<td style="text-align: right;">
+				</td>
+				<td></td>
+			</tr>
+			</table>
+		</form>
+	</body>
+</html>

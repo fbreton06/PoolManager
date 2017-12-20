@@ -1,0 +1,122 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+		<title>Settings</title>
+		<link rel="stylesheet" href="style.css" type="text/css" />
+	</head>
+	<body>
+		<table style="width: 100%" border="0" cellpadding="1" cellspacing="1">
+		<tr>
+			<td style="text-align: center;">
+			<h1>Pool Survey: Settings</h1>
+			</td>
+		</tr>
+		</table>
+		<form method="post">
+			<input name="page" type="hidden" value="3" />
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td style="text-align: left;">
+				<input name="prev" type="image" src="RESPATHprev.png" value="Prev" />
+				</td>
+				<td></td>
+			</tr>
+			</table>
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h1>PH</h1>
+				</td>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Minimal </h2>
+				<h2>Ideal </h2>
+				<h2>Maximal </h2>
+				</td>
+				<td style="text-align: left; vertical-align: center;">
+				<h2><input name="ph_min" type="text" value="PH_MIN" /></h2>
+				<h2><input name="ph_idle" type="text" value="PH_IDLE" /></h2>
+				<h2><input name="ph_max" type="text" value="PH_MAX" /></h2>
+				</td>
+				<td style="text-align: center; vertical-align: center;">
+				<img src="RESPATHsonde.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h1>ORP</h1>
+				</td>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Minimal </h2>
+				<h2>Ideal </h2>
+				<h2>Maximal </h2>
+				</td>
+				<td style="text-align: left; vertical-align: center;">
+				<h2><input name="orp_min" type="text" value="ORP_MIN" /></h2>
+				<h2><input name="orp_idle" type="text" value="ORP_IDLE" /></h2>
+				<h2><input name="orp_max" type="text" value="ORP_MAX" /></h2>
+				</td>
+				<td style="text-align: center; vertical-align: center;">
+				<img src="RESPATHsonde.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h1>Temperature</h1>
+				</td>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Minimal </h2>
+				</td>
+				<td style="text-align: left; vertical-align: center;">
+				<h2><input name="temp_winter" type="text" value="TEMP_WINTER" /></h2>
+				</td>
+				<td style="text-align: center; vertical-align: center;">
+				<img src="RESPATHflocon.png">
+				</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h1>Pression</h1>
+				</td>
+				<td style="text-align: right; vertical-align: center;">
+				<h2>Maximale </h2>
+				<h2>Critique </h2>
+				</td>
+				<td style="text-align: left; vertical-align: center;">
+				<h2><input name="pressure_max" type="text" value="PRESSURE_MAX" /></h2>
+				<h2><input name="pressure_critical" type="text" value="PRESSURE_CRITICAL" /></h2>
+				</td>
+				<td style="text-align: center; vertical-align: center;">
+				<img src="RESPATHpression.png">
+				</td>
+			</tr>
+			<tr>
+			<td></td>
+			<td></td>
+			<td>
+			<input type="submit" name="save" value="Save values" /><br><br><br>
+			</td>
+			<td></td>
+			</tr>
+			</table>
+		</form>
+		<form method="post" ENCTYPE="multipart/form-data">
+			<input name="page" type="hidden" value="3" />
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td style="text-align: right; vertical-align: center;">
+				<h1>Firmware</h1>
+				</td>
+				<td></td>
+				<td style="text-align: center; vertical-align: top;">
+				<h2><input type="file" name="firmware" value="" /><br>UPDATE_MESSAGE</h2>
+				<input type="submit" name="update" value="Update firmware" />
+				</td>
+				<td style="text-align: center; vertical-align: center;">
+				<img src="RESPATHchip.png">
+				</td>
+			</tr>
+			</table>
+		</form>
+	</body>
+</html>

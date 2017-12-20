@@ -1,0 +1,71 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+		<title>Status</title>
+		<link rel="stylesheet" href="style.css" type="text/css" />
+	</head>
+	<script type="text/javascript">
+	function refresh(element) {
+		try {// IE support
+			element.click();
+		}catch(e) {// Firefox support
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+			element.dispatchEvent(evt); // Send click event on the given element
+		}
+	}
+	function auto_refresh() {
+		window.setTimeout(" refresh(document.getElementById(\"refresh\"));", 5000, "JavaScript");
+	}
+	</script>
+	<body onload="auto_refresh(); ">
+		<table style="width: 100%" border="0" cellpadding="1" cellspacing="1">
+		<tr>
+			<td style="text-align: center;">
+			<h1>Pool Survey: Status</h1>
+			</td>
+		</tr>
+		</table>
+		<form method="post">
+			<input name="page" type="hidden" value="0" />
+			<input id="refresh" type="image" src="RESPATHhidden.png" value="0" />
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td></td>
+				<td></td>
+<td></td><td></td>
+				<td style="text-align: right;">
+				<input name="next" type="image" src="RESPATHnext.png" value="Next" />
+				</td>
+			</tr>
+			<tr>
+<td></td>
+				<td style="text-align: left; vertical-align: center; width: 300px;">
+				<h2><img src="LEDPUMP">  Main water pump</h2>
+				<h2><img src="LEDROBOT">  Cleaner robot</h2>
+				<h2><img src="LEDPH">  PH- injection</h2>
+				<h2><img src="LEDCL">  Chlorine injection</h2>
+				<h2><img src="LEDFILL">  Water filling</h2>
+				<h2><img src="LEDLIGHT">  Lights</h2>
+				<h2><img src="LEDOPEN">  Pool curtain openned</h2>
+				<h2><img src="LEDDEFAULT">  Defaults</h2>
+				</td>
+				<td style="text-align: right; vertical-align: center; width: 200px;">
+				<h2>PH Level : </h2>
+				<h2>ORP Level : </h2>
+				<h2>Temperature : </h2>
+				<h2>Pression : </h2>
+				</td>
+				<td style="text-align: left; vertical-align: center;">
+				<h2>PHLEVEL</h2>
+				<h2>ORPLEVELmV</h2>
+				<h2>TEMPERATUREºC</h2>
+				<h2>PRESSIONBar</h2>
+				</td>
+<td></td>
+			</tr>
+			</table>
+		</form>
+	</body>
+</html>

@@ -1,0 +1,17 @@
+body, html {
+	background:url('resources/background.jpg');
+	background-size:cover;
+	margin:0;
+	width:100%;
+	height:100%;
+	background-repeat:no-repeat;
+	color: white;
+}
+h1 {
+	font-weight: bold;
+}
+
+h2 {
+	font-size: large;
+	font-weight: bold;
+}
