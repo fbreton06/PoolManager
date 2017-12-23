@@ -2,13 +2,12 @@
 import time
 from button import Button
 from helper import *
-
+from threading import Lock
 
 class TicksPerSecond(Debug):
     TPS_TIMES_PER_PERIOD = 3
     def __init__(self, holdLastTimeoutMillis):
         Debug.__init__(self)
-        self.__tps = 0.0
         self.__counters = list()
         self.__started = list()
         self.__previousTime = time.time() * 1000
@@ -18,7 +17,7 @@ class TicksPerSecond(Debug):
         self.__curCounter = 0
         self.__deltaTime = holdLastTimeoutMillis / self.TPS_TIMES_PER_PERIOD
 
-    def update(self, tick=True):
+    def __StateUpdate(self, tick=True):
         currentTime = time.time() * 1000
         if currentTime - self.__previousTime >= self.__deltaTime:
             self.__counters[self.__curCounter] = 0
@@ -32,11 +31,8 @@ class TicksPerSecond(Debug):
                 self.__counters[i] += 1
         currentTime -= self.__started[self.__curCounter]
         if currentTime <= 0:
-            currentTime = 1 # This is a division by zero protection.
-        self.__tps = float(self.__counters[self.__curCounter] * 1000) / currentTime
-
-    def getTPS(self):
-        return int(self.__tps)
+            currentTime = 1
+        return int(float(self.__counters[self.__curCounter] * 1000) / currentTime)
 
 class Rotary(TicksPerSecond):
     MIN_TPS = 5
@@ -46,10 +42,11 @@ class Rotary(TicksPerSecond):
         TicksPerSecond.__init__(self, holdLastTimeout_ms)
         self.__minValue = min
         self.__maxValue = max
-        self.__position = position
+        self.__previousPosition = self.__position = position
         self.__btnA = Button(pinA, debounce_ms, self.__callback)
         self.__btnB = Button(pinB, debounce_ms)
         self.callback = callback
+        self.__lock = Lock()
 
     def __constrain(self, value, min, max):
         if value > max:
@@ -58,44 +55,41 @@ class Rotary(TicksPerSecond):
             return min
         return value
 
-    def __callback(self, pin, state):
-        self.update()
-        if self.callback:
-            self.callback(self.__position)
-
-    def update(self):
-        self.__btnA.update()
-        self.__btnB.update()
+    def StateUpdate(self):
+        self.__btnA.StateUpdate()
+        self.__btnB.StateUpdate()
         if self.__btnA.isPressed():
-            super(Rotary, self).update(True)
-            speed = self.__constrain(self.getTPS(), self.MIN_TPS, self.MAX_TPS) - self.MIN_TPS
+            tps = self.__StateUpdate(True)
+            speed = self.__constrain(tps, self.MIN_TPS, self.MAX_TPS) - self.MIN_TPS
             delta = max(1, (self.__maxValue - self.__minValue) / self.TICKS_AT_MAX_SPEED_FOR_FULL_SPAN)
-#            // Linear acceleration (very sensitive - not comfortable)
-#            // long step = 1 + delta * speed / (MAX_TPS - MIN_TPS);
-#
-#            // Exponential acceleration - square (OK for [maxValue - minValue] = up to 5000)
-#            // long step = 1 + delta * speed * speed / ((MAX_TPS - MIN_TPS) * (MAX_TPS - MIN_TPS));
-#
-#            // Exponential acceleration - cubic (most comfortable)
             step = 1 + delta * speed * speed * speed / \
                     ((self.MAX_TPS - self.MIN_TPS) * (self.MAX_TPS - self.MIN_TPS) * (self.MAX_TPS - self.MIN_TPS))
-
+            self.__lock.acquire()
             self.__position = self.__constrain(self.__position + [step, -step][self.__btnB.isUp()], self.__minValue, self.__maxValue)
+            self.__lock.release()
         else:
-            super(Rotary, self).update(False)
+            self.__StateUpdate(False)
+
+    def __callback(self, pin, state):
+        self.StateUpdate()
+        if self.callback:
+            self.__lock.acquire()
+            position = self.__position
+            delta = position - self.__previousPosition
+            self.__previousPosition = position
+            self.__lock.release()
+            self.callback(position, delta)
 
     def getPosition(self):
-#        disableInterrupts()
-        result = self.__position
-#        restoreInterrupts()
-        raise ValueError, "Not yet implemented!"
-        return result
+        self.__lock.acquire()
+        position = self.__position
+        self.__lock.release()
+        return position
 
     def setPosition(self, newPosition):
-#        disableInterrupts()
-#        self.__position = self.__constrain(newPosition, self.__minValue, self.__maxValue)
-#        restoreInterrupts()
-        raise ValueError, "Not yet implemented!"
+        self.__lock.acquire()
+        self.__previousPosition = self.__position = self.__constrain(newPosition, self.__minValue, self.__maxValue)
+        self.__lock.release()
 
 def __button(pin, state):
         print 'Btn:', pin, state

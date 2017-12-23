@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import sys, os, ConfigParser, threading, types
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, "lib"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
 
 from helper import Debug
 
@@ -19,7 +19,7 @@ class Database(Debug, ConfigParser.ConfigParser):
         if os.path.isdir(os.path.join("media", "pi", "data")):
             self.__filename = os.path.join("media", "pi", "data", filename)
         else:
-            self.__filename = os.path.join(os.path.basename(__file__), os.pardir, filename)
+            self.__filename = os.path.join(os.path.basename(__file__), filename)
         if not os.path.exists(self.__filename) and not os.path.exists(self.__filename + ".new"):
             for section in self.SECTIONS:
                 self.add_section(section)

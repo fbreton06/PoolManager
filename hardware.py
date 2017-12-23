@@ -1,17 +1,12 @@
 #!/usr/bin/python
 import os, time, sys, types
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, "lib"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
 
 from helper import Debug
 
-simu = False
-try:
-    import ds18b20
-    from Adafruit_ADS1x15 import ADS1115 # sudo pip install adafruit-ads1x15
-    import RPi.GPIO as GPIO
-except:
-    from simul import ds18b20, ADS1115, GPIO
-    simu = True
+import ds18b20
+from Adafruit_ADS1x15 import ADS1115 # sudo pip install adafruit-ads1x15
+import RPi.GPIO as GPIO
 
 # Raspberry 3 I/O Mapping
 

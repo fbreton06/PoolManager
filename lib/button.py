@@ -19,7 +19,7 @@ class Button(Debug):
     def __callback(self, pin):
         self.__btnCb(pin, GPIO.input(pin))
 
-    def update(self):
+    def StateUpdate(self):
         state = GPIO.input(self.__pin)
         currentTime = time.time() * 1000
         self.__previousState = self.__currentState
