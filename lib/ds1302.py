@@ -92,13 +92,12 @@ class RTC(Debug):
     WR_REG = 0x80
     RD_REG = 0x81
     RAM_ADDR_BASE = 0x40
-    def __init__(self, scl_pin, io_pin, rst_pin, mode=GPIO.BCM):
+    def __init__(self, scl_pin, io_pin, rst_pin):
         Debug.__init__(self)
         self.__scl = scl_pin
         self.__io = io_pin
         self.__rst = rst_pin
         self.__ramSize = 31
-        GPIO.setmode(mode)
         GPIO.setup(self.__scl, GPIO.OUT)
         GPIO.setup(self.__io, GPIO.IN)
         GPIO.setup(self.__rst, GPIO.OUT)
@@ -244,6 +243,7 @@ class RTC(Debug):
         return dt
 
 if __name__ == "__main__":
+    GPIO.setmode(GPIO.BCM)
     rtc = RTC(23, 24, 25)
     rtc.debug_level = rtc.DEBUG
     if rtc.writeProtect(False):

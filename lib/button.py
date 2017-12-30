@@ -4,40 +4,51 @@ import RPi.GPIO as GPIO
 from helper import *
 
 class Button(Debug):
-    def __init__(self, pin, debounce_ms=10, callback=None):
+    def __init__(self, pin, debounce_ms=50, btnCb=None, edge=GPIO.FALLING, pullupDown=GPIO.PUD_UP):
         Debug.__init__(self)
         self.__pin = pin;
         self.__debounce_ms = debounce_ms
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.__pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        self.__previousTime = time.time() * 1000
-        self.__previousState = self.__currentState = GPIO.input(self.__pin)
-        if callback:
-            self.__btnCb = callback
-            GPIO.add_event_detect(self.__pin, GPIO.BOTH, callback=self.__callback)
+        GPIO.setup(self.__pin, GPIO.IN, pull_up_down=pullupDown)
+        self.__btnCb = btnCb
+        if edge == GPIO.BOTH:
+            GPIO.add_event_detect(self.__pin, GPIO.BOTH, callback=self.__callbackBoth)
+        elif edge == GPIO.RISING:
+            GPIO.add_event_detect(self.__pin, GPIO.RISING, callback=self.__callbackRising)
+        else:
+            GPIO.add_event_detect(self.__pin, GPIO.FALLING, callback=self.__callbackFalling)
 
-    def __callback(self, pin):
-        self.__btnCb(pin, GPIO.input(pin))
+    def __callbackBoth(self, pin):
+        debounce = self.__debounce_ms
+        value = GPIO.input(pin)
+        while debounce > 0:
+            time.sleep(0.01)
+            new_value = GPIO.input(pin)
+            if value != new_value:
+                value = new_value
+                debounce = self.__debounce_ms
+            self.__debounce_ms -= 10
+        self.value = (value == GPIO.HIGH)
+        if self.__btnCb:
+            self.__btnCb(pin, self.value)
 
-    def StateUpdate(self):
-        state = GPIO.input(self.__pin)
-        currentTime = time.time() * 1000
-        self.__previousState = self.__currentState
-        if state != self.__currentState:
-            if currentTime - self.__previousTime >= self.__debounce_ms:
-                self.__currentState = state
-            self.__previousTime = currentTime
-        elif currentTime - self.__previousTime >= self.__debounce_ms:
-            self.__previousTime = currentTime - self.__debounce_ms - 1
+    def __callbackRising(self, pin):
+        debounce = self.__debounce_ms
+        while debounce > 0:
+            time.sleep(0.01)
+            if GPIO.input(pin) != GPIO.HIGH:
+                debounce = self.__debounce_ms
+            self.__debounce_ms -= 10
+        self.value = True
+        if self.__btnCb:
+            self.__btnCb(pin, self.value)
 
-    def isPressed(self):
-        return not self.__currentState and self.__previousState
-
-    def isReleased(self):
-        return self.__currentState and not self.__previousState
-
-    def isDown(self):
-        return not self.__currentState
-
-    def isUp(self):
-        return self.__currentState
+    def __callbackFalling(self, pin):
+        debounce = self.__debounce_ms
+        while debounce > 0:
+            time.sleep(0.01)
+            if GPIO.input(pin) != GPIO.LOW:
+                debounce = self.__debounce_ms
+            self.__debounce_ms -= 10
+        self.value = False
+        if self.__btnCb:
+            self.__btnCb(pin, self.value)

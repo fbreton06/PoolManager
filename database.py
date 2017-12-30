@@ -6,8 +6,8 @@ from helper import Debug
 
 class Database(Debug, ConfigParser.ConfigParser):
     SECTIONS = {"mode":{"pump":2,"robot":2,"ph":2,"orp":2,"filling":2,"program":True},
-                "ph":{"current":0.0,"min":7.0,"idle":7.2,"max":8.0,"delay":0},
-                "orp":{"current":0,"min":350,"idle":650,"max":950,"delay":0},
+                "ph":{"current":0.0,"offset":0.0,"min":7.0,"idle":7.2,"max":8.0,"delay":0},
+                "orp":{"current":0,"offset":0,"min":350,"idle":650,"max":950,"delay":0},
                 "temp":{"current":0.0,"winter":10.0,"max":-50.0},
                 "pressure":{"current":0.0,"max":1.3,"critical":1.5},
                 "state":{"pump":False,"robot":False,"ph":False,"orp":False,"filling":False,"light":False,"open":False,"defaults":[]},
@@ -19,7 +19,7 @@ class Database(Debug, ConfigParser.ConfigParser):
         if os.path.isdir(os.path.join("media", "pi", "data")):
             self.__filename = os.path.join("media", "pi", "data", filename)
         else:
-            self.__filename = os.path.join(os.path.basename(__file__), filename)
+            self.__filename = os.path.join(os.path.dirname(__file__), filename)
         if not os.path.exists(self.__filename) and not os.path.exists(self.__filename + ".new"):
             for section in self.SECTIONS:
                 self.add_section(section)
@@ -82,7 +82,8 @@ class Database(Debug, ConfigParser.ConfigParser):
         handle = open(self.__filename + ".new",'w')
         self.write(handle)
         handle.close()
-        os.remove(self.__filename)
+        if os.path.isfile(self.__filename):
+            os.remove(self.__filename)
         os.rename(self.__filename + ".new", self.__filename)
         self.lock.release()
 

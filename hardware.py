@@ -4,7 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
 
 from helper import Debug
 
-import ds18b20
+import ds18b20, button, smbus
 from Adafruit_ADS1x15 import ADS1115 # sudo pip install adafruit-ads1x15
 import RPi.GPIO as GPIO
 
@@ -36,12 +36,58 @@ import RPi.GPIO as GPIO
 
 # all VDD are +5v
 
+class Rotary:
+    REG_POS_CUR = 0
+    REG_POS_MIN = 1
+    REG_POS_INI = 2
+    REG_POS_MAX = 3
+    REG_MSB_BMP = 0x80
+    def __init__(self, unused, eventPin, rotaryCb, max=1000, min=0, position=0):
+        GPIO.setup(eventPin, GPIO.IN)
+        self.__bus = smbus.SMBus(1)
+        self.__address = 0x33
+        assert min >= -32768, "Unbound value min"
+        assert max < 32767, "Unbound value max"
+        assert min < max, "Incoherency values min >= max"
+        assert min <= position <= max, "Unbound value position"
+        # Set upper bound at -32768 (minimum supported by the actual ATMEGA328p chip)
+        bus.write_byte_data(self.__address, self.REG_POS_MIN, min & 0xFF)
+        bus.write_byte_data(self.__address, self.REG_POS_MIN | self.REG_MSB_BMP, (min / 256) & 0xFF)
+        # Set lower bound at 32767 (maximum supported by the actual ATMEGA328p chip)
+        bus.write_byte_data(self.__address, self.REG_POS_INI, position & 0xFF)
+        bus.write_byte_data(self.__address, self.REG_POS_INI | self.REG_MSB_BMP, (position / 256) & 0xFF)
+        # Set lower bound at 32767 (maximum supported by the actual ATMEGA328p chip)
+        bus.write_byte_data(self.__address, self.REG_POS_MAX, max & 0xFF)
+        bus.write_byte_data(self.__address, self.REG_POS_MAX | self.REG_MSB_BMP, (max / 256) & 0xFF)
+        self.__previous = position
+        self.__callback = rotaryCb
+        GPIO.add_event_detect(eventPin, GPIO.FALLING, callback=self.__event)
+
+    def __del__(self):
+        self.__bus.close()
+
+    def __event(self, pin):
+        bus.write_byte(self.__address, self.REG_POS_CUR)
+        lsb = bus.read_byte(self.__address)
+        bus.write_byte(self.__address, self.REG_POS_CUR | self.REG_MSB_BMP)
+        msb = bus.read_byte(self.__address)
+        position = 256 * msb + lsb
+        if position > 0x7FFF: # Treat negative case
+            position -= 0x10000
+        position /= 2 # more accurate
+        delta = position - self.__previous
+        if delta != 0:
+            self.__previous = position
+            self.__callback(position, delta)
+
+
 class Information(Debug):
     ORP_CAN_PIN = 1
     PH_CAN_PIN = 2
     PSI_CAN_PIN = 3
     LIQUID_LEVEL_GPIO_PIN = 26
     LIQUID_MOVE_GPIO_PIN = 12
+    ROTARY_EVENT_GPIO_PIN = 20
     def __init__(self, moveDetectCb, rotaryCb, buttonCb, debounce_ms=200):
         Debug.__init__(self)
         self.__can = ADS1115(0x49)
@@ -49,12 +95,15 @@ class Information(Debug):
         GPIO.setup(self.LIQUID_MOVE_GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         self.__temp = ds18b20.Temperature("28-0417716a37ff")
         self.__moveDetectCb = moveDetectCb
-        GPIO.add_event_detect(self.LIQUID_MOVE_GPIO_PIN, GPIO.BOTH, callback=self.__callback, bouncetime=debounce_ms)
-        self.rotary = rotary.Rotary(16, 20, 1000, accel=8, callback=rotaryCb)
-        self.button = button.Button(21, debounce_ms, callback=buttonCb)
+        GPIO.add_event_detect(self.LIQUID_MOVE_GPIO_PIN, GPIO.BOTH, callback=self.__moveDetect, bouncetime=debounce_ms)
+        self.rotary = rotary.Rotary(-1, 20, rotaryCb, 1000,-1000, 0)
+        self.button = button.Button(21, debounce_ms, btnCb=buttonCb)
 
-    def __callback(self, pin):
+    def __moveDetect(self, pin):
         self.__moveDetectCb(pin, GPIO.input(pin))
+
+    def __rotaryEvent(self, pin):
+        self.__rotaryCb()
 
     def getLiquidMoveState(self):
         return not GPIO.input(self.LIQUID_MOVE_GPIO_PIN)

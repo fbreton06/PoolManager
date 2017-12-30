@@ -1,12 +1,13 @@
 #!/usr/bin/python
 import os, time, sys, types, threading
 from datetime import date
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, "lib"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
 
 from helper import Debug
 from hardware import Information, Command
 from database import Database
 
+from lcd1602 import LCD
 import RPi.GPIO as GPIO
 
 try:
@@ -84,19 +85,32 @@ class Manager(MyClass, Debug, threading.Thread):
         elif self.lcdMenu == "ph_sub":
             self.lcd.write(0, 0, "PH Calibration")
             self.lcd.write(1, 0, "PH Etalon=%.1f" % self.lcdValue)
+        elif self.lcdMenu == "ph_calib":
+            self.lcd.write(0, 0, "PH Calibration")
+            self.lcd.write(1, 0, "Please wait...")
+        elif self.lcdMenu == "ph_done":
+            self.lcd.write(0, 0, "PH Calibration")
+            self.lcd.write(1, 0, "Done")
         elif self.lcdMenu == "orp":
             self.lcd.write(0, 0, "ORP Calibration")
             self.lcd.write(1, 0, "Enter")
         elif self.lcdMenu == "orp_sub":
             self.lcd.write(0, 0, "ORP Calibration")
             self.lcd.write(1, 0, "ORP Etalon=%.1f" % self.lcdValue)
-# TODO 2 pouvoir forcer la pompe sur place...
-#        elif self.lcdMenu == "Circulation":
-#            self.lcd.write(0, 0, "Pompe principale")
-#            self.lcd.write(1, 0, "Etat=%s" % ["Arret", "Marche"][self.state.pump])
+        elif self.lcdMenu == "orp_calib":
+            self.lcd.write(0, 0, "ORP Calibration")
+            self.lcd.write(1, 0, "Please wait...")
+        elif self.lcdMenu == "orp_done":
+            self.lcd.write(0, 0, "ORP Calibration")
+            self.lcd.write(1, 0, "Done")
 
-# TODO 1 ajouter lcd + fonction etalonnage des sondes
-# TODO 1 ajouter un bouton reset defaut? ou a faire sur place (LCD)
+    def __phCalibrationDone():
+        self.ph.offset = self.lcdValue - self.ph.current
+        self.lcdDisplay("ph_done")
+
+    def __orpCalibrationDone():
+        self.orp.offset = self.lcdValue - self.orp.current
+        self.lcdDisplay("orp_done")
 
     def __validButton(self, pin, state):
         if state == 0:
@@ -123,12 +137,28 @@ class Manager(MyClass, Debug, threading.Thread):
                     self.lcdValue = 7.0
                     self.lcdDisplay("ph_sub")
                 elif self.lcdMenu == "ph_sub":
-                    pass # demmarage de la procedure (attend 1mn et mesure et enregistre l'offset (dans la class info) qui doit etre appliquer apres
+                    # Wait 1mn, get PH measure and switch to "ph_start"
+                    self.__calib = threading.Timer(60.0, self.__phCalibrationDone)
+                    self.__calib.run()
+                    self.lcdDisplay("ph_calib")
+                elif self.lcdMenu == "ph_calib":
+                    self.__calib.cancel()
+                    self.lcdDisplay("ph")
+                elif self.lcdMenu == "ph_done":
+                    self.lcdDisplay("ph")
                 elif self.lcdMenu == "orp":
                     self.lcdValue = 650
                     self.lcdDisplay("orp_sub")
                 elif self.lcdMenu == "orp_sub":
-                    pass # demmarage de la procedure (attend 1mn et mesure et enregistre l'offset (dans la class info) qui doit etre appliquer apres
+                    # Wait 1mn, get ORP measure and switch to "orp_start"
+                    self.__calib = threading.Timer(60.0, self.__orpCalibrationDone)
+                    self.__calib.run()
+                    self.lcdDisplay("orp_calib")
+                elif self.lcdMenu == "orp_calib":
+                    self.__calib.cancel()
+                    self.lcdDisplay("orp")
+                elif self.lcdMenu == "orp_done":
+                    self.lcdDisplay("orp")
                 elif self.lcdMenu == "pump":
                     self.lcdValue = self.mode.pump
                     self.lcdDisplay("pump_sub")
@@ -136,14 +166,14 @@ class Manager(MyClass, Debug, threading.Thread):
                     self.mode.pump = self.lcdValue
                     self.lcdDisplay("pump")
 
-    def __rotaryMove(self, position):
+    def __rotaryMove(self, position, delta):
         if not self.lcd.light():
             self.lcd.light(True)
             self.lcdLightTimer = self.LCD_LIGHT_TICK
             self.lcdDisplay("default")
         else:
             if self.lcdMenu == "default":
-                if position > 0:
+                if delta > 0:
                     self.lcdDisplay("ph")
             elif self.lcdMenu == "default_sub":
                 if self.lcdValue >= len(self.state.defaults):
@@ -157,19 +187,26 @@ class Manager(MyClass, Debug, threading.Thread):
                     else:
                         self.lcdDisplay()
             elif self.lcdMenu == "ph":
-                if position > 0:
+                if delta > 0:
                     self.lcdDisplay("orp")
                 else:
                     self.lcdDisplay("default")
             elif self.lcdMenu == "ph_sub":
-                self.lcdValue += 1# use delta
+                self.lcdValue += delta
             elif self.lcdMenu == "orp":
-                if position > 0:
-                    self.lcdDisplay("default")
+                if delta > 0:
+                    self.lcdDisplay("pump")
                 else:
                     self.lcdDisplay("ph")
             elif self.lcdMenu == "orp_sub":
-                self.lcdValue += 1# use delta
+                self.lcdValue += delta
+            elif self.lcdMenu == "pump":
+                if delta > 0:
+                    self.lcdDisplay("default")
+                else:
+                    self.lcdDisplay("orp")
+            elif self.lcdMenu == "pump_sub":
+                self.lcdValue = (self.lcdValue + delta) % 3 # OFF AUTO ON
 
     def __waterMoveDetect(self, pin, detected):
         if not detected and self.cmd.pump:
@@ -239,7 +276,7 @@ class Manager(MyClass, Debug, threading.Thread):
             self.database.backup()
             self.autoSaveTick = 0
             # All seems to be OK, we can remove the previous version
-            backup = os.path.join(os.path.basename(__file__), os.pardir, "PoolSurvey_bak")
+            backup = os.path.join(os.path.dirname(__file__), os.pardir, "PoolSurvey_bak")
             if os.path.exists(backup):
                 os.system("rm -frd %s" % backup)
         self.autoSaveTick += 1
@@ -261,8 +298,8 @@ class Manager(MyClass, Debug, threading.Thread):
             self.__computePumpScheduling(self.temp.max)
             self.temp.max = -50.0
         if self.updatePumpState():
-            self.ph.current = self.info.getPHLevel(self.temp.current)
-            self.orp.current = self.info.getORPLevel()
+            self.ph.current = self.ph.offset + self.info.getPHLevel(self.temp.current)
+            self.orp.current = self.orp.offset + self.info.getORPLevel()
             self.updateRobotState()
             self.updatePHState()
             self.updateORPState()
@@ -464,4 +501,3 @@ if __name__ == '__main__':
         manager.stop()
 
 # TODO 2 mettre en parametre de server.py le path /media/pi/data
-# TODO 2 ajouter la liste des numero de mobile dans la data base + setting web
