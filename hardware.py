@@ -16,9 +16,9 @@ import RPi.GPIO as GPIO
 #   2   SDA: ADS1115 (maybe needed + R10K to +5V) + LCD
 #   3   SCL: ADS1115 (maybe needed + R10K to +5V) + LCD
 #   4   1-Wire Temp (Jaune + R4.7K to +5V) (Noir=GND, rouge=5v)
-#  16   Rotary CLK
-#  20   Rotary DT
-#  21   Rotary SW
+#  16   Rotary CLK (Jaune)
+#  20   Rotary DT (Marron)
+#  21   Rotary SW (Blanc)
 #  26   Water level (Jaune + R2.2K to GND) (Bleu=GND, noir+marron=5v)
 #  12   Water move
 
@@ -156,19 +156,21 @@ class Command(Debug):
             return [False, True][GPIO.input(self.RELAY_GPIO_PIN[item.lower()]) == GPIO.HIGH]
         raise AttributeError
 
-    def cl(self, percent=0, freqHz=1.0):
+    def cl(self, percent, freqHz=100):
         if percent > 0 and percent <= 100:
             self.__cl = GPIO.PWM(17, freqHz)
             self.__cl.start(percent)
-        else:
-            self.__cl.stop()
+            return True
+        self.__cl.stop()
+        return False
 
-    def ph(self, percent=0, freqHz=1.0):
+    def ph(self, percent, freqHz=100):
         if percent > 0 and percent <= 100:
             self.__ph = GPIO.PWM(27, freqHz)
             self.__ph.start(percent)
-        else:
-            self.__ph.stop()
+            return True
+        self.__ph.stop()
+        return False
 
 def WaterMoveDetection(pin, detected):
     print "Circulation d'eau en cours: %s" % ["NON", "OUI"][detected]
@@ -189,8 +191,6 @@ if __name__ == '__main__':
             print hex(bitmap)
             cmd.Pump = (bitmap & 0x01) == 0
             cmd.robot = (bitmap & 0x02) == 0
-            cmd.PH = (bitmap & 0x04) == 0
-            cmd.Cl = (bitmap & 0x08) == 0
             cmd.LIGHT = (bitmap & 0x10) == 0
             cmd.fill = (bitmap & 0x20) == 0
             cmd.Open = (bitmap & 0x40) == 0

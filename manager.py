@@ -72,6 +72,7 @@ class Manager(MyClass, Debug, threading.Thread):
         if self.lcdMenu == "default":
             self.lcd.write(0, 0, "PH=%.1f" % self.ph.current)
             self.lcd.write(0, 8, "ORP=%.1fmv" % self.orp.current)
+            self.lcd.write(1, 0, time.strftime("%H:%M"))
         if self.lcdMenu == "default_sub":
             self.lcd.write(0, 0, "PH=%.1f" % self.ph.current)
             self.lcd.write(0, 8, "ORP=%.1fmv" % self.orp.current)
@@ -310,6 +311,8 @@ class Manager(MyClass, Debug, threading.Thread):
             self.lcdLightTimer -= 1
             if self.lcdLightTimer <= 0:
                 self.lcd.light(False)
+            elif self.lcdMenu == "default":
+                self.lcdDisplay()
 
     def run(self):
         while not self.__event.is_set():
@@ -341,10 +344,8 @@ class Manager(MyClass, Debug, threading.Thread):
 
     def stopPump(self, delay_s=0):
         self.state.robot = self.cmd.robot = False
-        self.cmd.ph(0)
-        self.state.ph = False
-        self.cmd.cl(0)
-        self.state.orp = False
+        self.state.ph = self.cmd.ph(0)
+        self.state.orp = self.cmd.cl(0)
         if delay_s:
             time.sleep(delay_s) # TODO 2 a voir a l'usage
         else:
@@ -409,11 +410,9 @@ class Manager(MyClass, Debug, threading.Thread):
 
     def updatePHState(self):
         if self.mode.ph == self.OFF_STATE:
-            self.cmd.ph(0)
-            self.state.ph = False
+            self.state.ph = self.cmd.ph(0)
         elif self.mode.ph == self.ON_STATE:
-            self.cmd.ph(50)
-            self.state.ph = True
+            self.state.ph = self.cmd.ph(10) # TODO 2 regler une vitesse pas trop rapide
         else:
             # TODO 1 les delay 360 cidessous devraient evoluer selon la variation effective du ph...
             # ou le PWM ...
@@ -421,38 +420,31 @@ class Manager(MyClass, Debug, threading.Thread):
                 self.ph.delay -= 1
                 if self.ph.delay <= 0 and self.state.ph:
                     self.ph.delay =  360 / self.REFRESH_TICK # Delay inter-injection
-                    self.cmd.ph(0)
-                    self.state.ph = False
+                    self.state.ph = self.cmd.ph(0)
             else:
                 if self.ph.current > self.ph.idle:
-                    self.cmd.ph(50)
-                    self.state.ph = True
+                    self.state.ph = self.cmd.ph(50)
                     self.ph.delay =  360 / self.REFRESH_TICK # Delay injection
             if self.ph.current < self.ph.min:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau du PH est trop bas!")
-                self.cmd.ph(0)
-                self.state.ph = False
+                self.state.ph = self.cmd.ph(0)
             elif self.ph.current > self.ph.max:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau du PH est trop haut!")
 
     def updateORPState(self):
         if self.mode.orp == self.OFF_STATE:
-            self.cmd.cl(0)
-            self.state.orp = False
+            self.state.orp = self.cmd.cl(0)
         elif self.mode.orp == self.ON_STATE:
-            self.cmd.cl(50)
-            self.state.orp = True
+            self.state.orp = self.cmd.cl(10) # TODO 2 regler une vitesse pas trop rapide
         else:
             if self.orp.delay > 0:
                 self.orp.delay -= 1
                 if self.orp.delay <= 0 and self.state.orp:
                     self.orp.delay =  360 / self.REFRESH_TICK # Delay inter-injection
-                    self.cmd.cl(0)
-                    self.state.orp = False
+                    self.state.orp = self.cmd.cl(0)
             else:
                 if self.orp.current < self.orp.idle:
-                    self.cmd.cl(50)
-                    self.state.orp = True
+                    self.state.orp = self.cmd.cl(50)
                     # TODO 1 les delay 360 cidessous devraient evoluer selon la variation effective de l'orp...
                     # ou le PWM ...
                     self.orp.delay =  360 / self.REFRESH_TICK # Delay injection
@@ -460,8 +452,7 @@ class Manager(MyClass, Debug, threading.Thread):
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau de l'ORP trop bas!")
             elif self.orp.current > self.orp.max:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau de l'ORP trop haut!")
-                self.cmd.cl(0)
-                self.state.orp = False
+                self.state.orp = self.cmd.cl(0)
 
     def updateWaterFillingState(self):
         if self.mode.filling == self.OFF_STATE:
