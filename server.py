@@ -5,7 +5,7 @@ from BaseHTTPServer import HTTPServer
 from CGIHTTPServer import CGIHTTPRequestHandler
 from cgi import FieldStorage
 
-from managerSimu import Manager
+from manager import Manager
 
 import cgitb
 cgitb.enable()
@@ -228,17 +228,21 @@ class Handler(CGIHTTPRequestHandler):
 class Server(Manager):
     def __init__(self, port):
         try:
-            Manager.__init__(self, sys.stdout)
+            Manager.__init__(self)
+            print "Manager initialisation done"
             self.start()
             self.__httpd = HTTPServer(("", port), Handler)
             self.__httpd.manager = self
             print "Serveur actif sur le port %d\nStarting server, use <Ctrl-C> to stop" % port
             self.__httpd.serve_forever()
+        except KeyboardInterrupt:
+            self.stop()
+            sys.exit(0)
         except:
             print "Serveur closed"
             self.stop()
             traceback.print_exc(file=open("/home/pi/python/errlog.txt","a"))
-            if self.manager.SIMU:
+            if self.SIMU:
                 sys.exit(1)
             else:
                 os.system("sudo reboot")

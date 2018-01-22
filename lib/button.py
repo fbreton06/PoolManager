@@ -6,7 +6,7 @@ from helper import *
 class Button(Debug):
     def __init__(self, pin, debounce_ms=50, btnCb=None, edge=GPIO.FALLING, pullupDown=GPIO.PUD_UP):
         Debug.__init__(self)
-        self.__pin = pin;
+        self.__pin = pin
         self.__debounce_ms = debounce_ms
         GPIO.setup(self.__pin, GPIO.IN, pull_up_down=pullupDown)
         self.__btnCb = btnCb

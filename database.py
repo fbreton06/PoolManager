@@ -6,8 +6,8 @@ from helper import Debug
 
 class Database(Debug, ConfigParser.ConfigParser):
     SECTIONS = {"mode":{"pump":2,"robot":2,"ph":2,"orp":2,"filling":2,"program":True},
-                "ph":{"current":0.0,"min":7.0,"idle":7.2,"max":8.0,"delay":0},
-                "orp":{"current":0,"min":350,"idle":650,"max":950,"delay":0},
+                "ph":{"current":0.0,"offset":0.0,"min":7.0,"idle":7.2,"max":8.0,"delay":0,"lbound":0.0,"ubound":14.0},
+                "orp":{"current":0,"offset":0,"min":350,"idle":650,"max":950,"delay":0,"lbound":-2000,"ubound":2000},
                 "temp":{"current":0.0,"winter":10.0,"max":-50.0},
                 "pressure":{"current":0.0,"max":1.3,"critical":1.5},
                 "state":{"pump":False,"robot":False,"ph":False,"orp":False,"filling":False,"light":False,"open":False,"defaults":[]},

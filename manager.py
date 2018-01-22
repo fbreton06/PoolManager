@@ -1,21 +1,51 @@
 #!/usr/bin/python
 import os, time, sys, types, threading
 from datetime import date
-sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
+if __name__ == "__main__":
+    path = os.getcwd()
+else:
+    path = os.path.dirname(__file__)
+sys.path.append(os.path.join(path, "lib"))
 
 from helper import Debug
-from hardware import Information, Command
+from hardware import Information, Command, Rotary
 from database import Database
+import button, smbus
 
 from lcd1602 import LCD
 import RPi.GPIO as GPIO
 
 try:
+    raise ErrorValue, "fake"
     from tmp import tmpClass as MyClass
 except:
     class MyClass:
         def alert(self, message):
             pass
+
+class I2C:
+    def __init__(self, nbClient):
+        self.__count = nbClient
+        self.__smbus = smbus.SMBus(1)
+        self.lock = threading.RLock()
+
+    def read_byte(self, address):
+        with self.lock:
+            value = self.__smbus.read_byte(address)
+        return value
+
+    def write_byte(self, address, value):
+        with self.lock:
+            self.__smbus.write_byte(address, value)
+
+    def write_byte_data(self, address, value, data):
+        with self.lock:
+            self.__smbus.write_byte_data(address, value, data)
+
+    def close(self):
+        self.__count -= 1
+        if self.__count == 0:
+            self.__smbus.close()
 
 class Manager(MyClass, Debug, threading.Thread):
     class Fake: pass
@@ -24,22 +54,28 @@ class Manager(MyClass, Debug, threading.Thread):
     DEFAULT_INFORMATION = 3
     FILLING_DEBOUNCE_TICK = 30
     DATABASE_SAVE_TICK = 360 # 1h
-    LCD_LIGHT_TICK = 6 # 1mn
+    LCD_LIGHT_TICK = 30 # 5mn
     REFRESH_TICK = 10 # in second
     OFF_STATE = 0
     ON_STATE = 1
     AUTO_STATE = 2
     SIMU = False
+    PUMP_MODES = ("OFF", "ON", "AUTO")
+    ROTARY_EVENT_GPIO_PIN = 22
+    ROTARY_SWITCH_GPIO_PIN = 24
     def __init__(self):
         Debug.__init__(self, Debug.ERROR)
         threading.Thread.__init__(self)
         self.__event = threading.Event()
         GPIO.setmode(GPIO.BCM)
-        self.info = Information(self.__waterMoveDetect, self.__rotaryMove, self.__validButton)
-        self.info.debug_level = self.debug_level
         self.cmd = Command()
         self.cmd.debug_level = self.debug_level
-        self.lcd = LCD(0x27)
+        self.info = Information(self.__waterMoveDetect)
+        self.info.debug_level = self.debug_level
+        self.__i2c = I2C(2)
+        self.__rotary = Rotary(False, self.ROTARY_EVENT_GPIO_PIN, self.__rotaryMove, bus=self.__i2c)
+        self.__button = button.Button(self.ROTARY_SWITCH_GPIO_PIN, 1000, self.__validButton, GPIO.RISING)        
+        self.lcd = LCD(0x27, bus=self.__i2c)
         self.lcdLightTimer = 0
         self.database = Database()
         self.database.debug_level = self.debug_level
@@ -67,115 +103,157 @@ class Manager(MyClass, Debug, threading.Thread):
         return text
 
     def lcdDisplay(self, menu=None):
+        #print self.lcdMenu, menu
         if menu != None:
             self.lcdMenu = menu
         self.lcd.clear()
         if self.lcdMenu == "default":
             self.lcd.write(0, 0, "PH=%.1f" % self.ph.current)
-            self.lcd.write(0, 8, "ORP=%.1fmv" % self.orp.current)
-        if self.lcdMenu == "default_sub":
+            self.lcd.write(0, 7, "ORP=%dmV" % self.orp.current)
+            self.lcd.write(1, 0, time.strftime("%H:%M"))
+        elif self.lcdMenu == "default_sub":
             self.lcd.write(0, 0, "PH=%.1f" % self.ph.current)
-            self.lcd.write(0, 8, "ORP=%.1fmv" % self.orp.current)
-            if self.lcdValue < len(self.state.defaults):
-                self.lcd.write(1, 0, "Default=%s" % self.state.defaults[self.lcdValue].split("_")[-1])
+            self.lcd.write(0, 7, "ORP=%dmV" % self.orp.current)
+            if len(self.state.defaults) > 0:
+                self.lcd.write(1, 0, "Default=%s" % self.state.defaults[self.lcdValue].split()[-1])
             else:
-                self.lcd.write(1, 0, "Retour")
+                self.lcd.write(1, 0, "Back")
         elif self.lcdMenu == "ph":
             self.lcd.write(0, 0, "PH Calibration")
             self.lcd.write(1, 0, "Enter")
         elif self.lcdMenu == "ph_sub":
             self.lcd.write(0, 0, "PH Calibration")
-            self.lcd.write(1, 0, "PH Etalon=%.1f" % self.lcdValue)
+            self.lcd.write(1, 0, "Wanted %.1f" % self.lcdValue)
+        elif self.lcdMenu == "ph_calib":
+            self.lcd.write(0, 0, "PH Calibration")
+            self.lcd.write(1, 0, "Please wait...")
+        elif self.lcdMenu == "ph_done":
+            self.lcd.write(0, 0, "PH Calibration")
+            self.lcd.write(1, 0, "Done")
         elif self.lcdMenu == "orp":
             self.lcd.write(0, 0, "ORP Calibration")
             self.lcd.write(1, 0, "Enter")
         elif self.lcdMenu == "orp_sub":
             self.lcd.write(0, 0, "ORP Calibration")
-            self.lcd.write(1, 0, "ORP Etalon=%.1f" % self.lcdValue)
-# TODO 1 ajouter lcd + fonction etalonnage des sondes
-# TODO 1 ajouter un bouton reset defaut? ou a faire sur place (LCD)
+            self.lcd.write(1, 0, "Wanted %dmV" % self.lcdValue)
+        elif self.lcdMenu == "orp_calib":
+            self.lcd.write(0, 0, "ORP Calibration")
+            self.lcd.write(1, 0, "Please wait...")
+        elif self.lcdMenu == "orp_done":
+            self.lcd.write(0, 0, "ORP Calibration")
+            self.lcd.write(1, 0, "Done")
+        elif self.lcdMenu == "pump":
+            self.lcd.write(0, 0, "Pump state: %s" % self.PUMP_MODES[self.mode.pump])
+            self.lcd.write(1, 0, "Enter")
+        elif self.lcdMenu == "pump_sub":
+            self.lcd.write(0, 0, "Pump state: %s" % self.PUMP_MODES[self.lcdValue])
+            self.lcd.write(1, 0, "Back")
+
+    def __phCalibrationDone(self):
+        self.ph.offset = self.lcdValue - self.ph.current
+        self.lcdDisplay("ph_done")
+
+    def __orpCalibrationDone(self):
+        self.orp.offset = self.lcdValue - self.orp.current
+        self.lcdDisplay("orp_done")
 
     def __validButton(self, pin, state):
-        if state == 0:
-            print "btn", self.lcdMenu
+        if state == True:
+            self.lcdLightTimer = self.LCD_LIGHT_TICK
             if not self.lcd.light():
                 self.lcd.light(True)
-                self.lcdLightTimer = self.LCD_LIGHT_TICK
                 self.lcdDisplay("default")
             else:
+                # Menu
                 if self.lcdMenu == "default":
                     self.lcdValue = 0
                     self.lcdDisplay("default_sub")
-                elif self.lcdMenu == "default_sub":
-                    if self.lcdValue >= len(self.state.defaults):
-                        self.lcdDisplay("default")
-                    else:
-                        self.state.defaults.remove(self.lcdValue)
-                        if self.lcdValue >= len(self.state.defaults):
-                            self.lcdValue -= 1
-                        if self.lcdValue < 0:
-                            self.lcdDisplay("default")
-                        else:
-                            self.lcdDisplay()
                 elif self.lcdMenu == "ph":
                     self.lcdValue = 7.0
                     self.lcdDisplay("ph_sub")
-                elif self.lcdMenu == "ph_sub":
-                    self.lcdMenu == "ph" # demmarage de la procedure (attend 1mn et mesure et enregistre l'offset (dans la class info) qui doit etre appliquer apres
                 elif self.lcdMenu == "orp":
                     self.lcdValue = 650
                     self.lcdDisplay("orp_sub")
-                elif self.lcdMenu == "orp_sub":
-                    self.lcdMenu == "orp" # demmarage de la procedure (attend 1mn et mesure et enregistre l'offset (dans la class info) qui doit etre appliquer apres
                 elif self.lcdMenu == "pump":
                     self.lcdValue = self.mode.pump
                     self.lcdDisplay("pump_sub")
+                # SubMenu
+                elif self.lcdMenu == "default_sub":
+                    self.state.defaults.pop(self.lcdValue)
+                    self.lcdDisplay("default")
+                elif self.lcdMenu == "ph_sub":
+                    self.__calib = threading.Timer(60.0, self.__phCalibrationDone)
+                    self.__calib.start()
+                    self.lcdDisplay("ph_calib")
+                elif self.lcdMenu == "orp_sub":
+                    self.__calib = threading.Timer(60.0, self.__orpCalibrationDone)
+                    self.__calib.start()
+                    self.lcdDisplay("orp_calib")
                 elif self.lcdMenu == "pump_sub":
                     self.mode.pump = self.lcdValue
                     self.lcdDisplay("pump")
+                # SubMenuCalibration
+                elif self.lcdMenu == "ph_calib":
+                    self.__calib.cancel()
+                    self.lcdDisplay("ph")
+                elif self.lcdMenu == "ph_done":
+                    self.lcdDisplay("ph")
+                elif self.lcdMenu == "orp_calib":
+                    self.__calib.cancel()
+                    self.lcdDisplay("orp")
+                elif self.lcdMenu == "orp_done":
+                    self.lcdDisplay("orp")
 
     def __rotaryMove(self, position, delta):
-        print "mov", self.lcdMenu, position, delta
+        self.lcdLightTimer = self.LCD_LIGHT_TICK
         if not self.lcd.light():
             self.lcd.light(True)
-            self.lcdLightTimer = self.LCD_LIGHT_TICK
             self.lcdDisplay("default")
         else:
+            # Menu
             if self.lcdMenu == "default":
                 if delta > 0:
                     self.lcdDisplay("ph")
-            elif self.lcdMenu == "default_sub":
-                if self.lcdValue >= len(self.state.defaults):
-                    self.lcdDisplay("default")
                 else:
-                    self.state.defaults.remove(self.lcdValue)
-                    if self.lcdValue >= len(self.state.defaults):
-                        self.lcdValue -= 1
-                    if self.lcdValue < 0:
-                        self.lcdDisplay("default")
-                    else:
-                        self.lcdDisplay()
+                    self.lcdDisplay("pump")
             elif self.lcdMenu == "ph":
                 if delta > 0:
                     self.lcdDisplay("orp")
                 else:
                     self.lcdDisplay("default")
-            elif self.lcdMenu == "ph_sub":
-                self.lcdValue += delta
             elif self.lcdMenu == "orp":
                 if delta > 0:
                     self.lcdDisplay("pump")
                 else:
                     self.lcdDisplay("ph")
-            elif self.lcdMenu == "orp_sub":
-                self.lcdValue += delta
             elif self.lcdMenu == "pump":
                 if delta > 0:
                     self.lcdDisplay("default")
                 else:
                     self.lcdDisplay("orp")
+            # SubMenu
+            elif self.lcdMenu == "default_sub":
+                self.lcdValue = (self.lcdValue + [-1, 1][delta > 0]) % len(self.state.defaults)
+                self.lcdDisplay()
+            elif self.lcdMenu == "ph_sub":
+                self.lcdValue += (delta / 10.0)
+                if self.lcdValue > self.ph.ubound:
+                    self.lcdValue = self.ph.ubound
+                elif self.lcdValue < self.ph.lbound:
+                    self.lcdValue = self.ph.lbound
+                self.lcdDisplay()
+            elif self.lcdMenu == "orp_sub":
+                if abs(delta) > 1:
+                    delta *= 5
+                self.lcdValue += delta
+                if self.lcdValue > self.orp.ubound:
+                    self.lcdValue = self.orp.ubound
+                elif self.lcdValue < self.orp.lbound:
+                    self.lcdValue = self.orp.lbound
+                self.lcdDisplay()
             elif self.lcdMenu == "pump_sub":
-                self.lcdValue = (self.lcdValue + delta) % 3 # OFF AUTO ON
+                self.lcdValue = (self.lcdValue + [-1, 1][delta > 0]) % len(self.PUMP_MODES)
+                self.lcdDisplay()
 
     def __waterMoveDetect(self, pin, detected):
         if not detected and self.cmd.pump:
@@ -245,7 +323,7 @@ class Manager(MyClass, Debug, threading.Thread):
             self.database.backup()
             self.autoSaveTick = 0
             # All seems to be OK, we can remove the previous version
-            backup = os.path.join(os.path.dirname(__file__), os.pardir, "PoolSurvey_bak")
+            backup = os.path.join(path, os.pardir, "PoolSurvey.bak")
             if os.path.exists(backup):
                 os.system("rm -frd %s" % backup)
         self.autoSaveTick += 1
@@ -258,7 +336,8 @@ class Manager(MyClass, Debug, threading.Thread):
         if self.__today != date.today().day:
             self.__today = date.today().day
             # Pressure checking
-            self.pressure.current = self.info.getPressure()
+            with self.__i2c.lock:
+                self.pressure.current = self.info.getPressure()
             if self.pressure.current > self.pressure.critical:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Pression trop importante. Nettoyez les filtres en urgence!")
             elif self.pressure.current > self.pressure.max:
@@ -267,8 +346,9 @@ class Manager(MyClass, Debug, threading.Thread):
             self.__computePumpScheduling(self.temp.max)
             self.temp.max = -50.0
         if self.updatePumpState():
-            self.ph.current = self.info.getPHLevel(self.temp.current)
-            self.orp.current = self.info.getORPLevel()
+            with self.__i2c.lock:
+                self.ph.current = self.ph.offset + self.info.getPHLevel(self.temp.current)
+                self.orp.current = self.orp.offset + self.info.getORPLevel()
             self.updateRobotState()
             self.updatePHState()
             self.updateORPState()
@@ -279,6 +359,8 @@ class Manager(MyClass, Debug, threading.Thread):
             self.lcdLightTimer -= 1
             if self.lcdLightTimer <= 0:
                 self.lcd.light(False)
+            elif self.lcdMenu == "default":
+                self.lcdDisplay()
 
     def run(self):
         while not self.__event.is_set():
@@ -310,10 +392,8 @@ class Manager(MyClass, Debug, threading.Thread):
 
     def stopPump(self, delay_s=0):
         self.state.robot = self.cmd.robot = False
-        self.cmd.ph(0)
-        self.state.ph = False
-        self.cmd.cl(0)
-        self.state.orp = False
+        self.state.ph = self.cmd.ph(0)
+        self.state.orp = self.cmd.cl(0)
         if delay_s:
             time.sleep(delay_s) # TODO 2 a voir a l'usage
         else:
@@ -378,11 +458,9 @@ class Manager(MyClass, Debug, threading.Thread):
 
     def updatePHState(self):
         if self.mode.ph == self.OFF_STATE:
-            self.cmd.ph(0)
-            self.state.ph = False
+            self.state.ph = self.cmd.ph(0)
         elif self.mode.ph == self.ON_STATE:
-            self.cmd.ph(50)
-            self.state.ph = True
+            self.state.ph = self.cmd.ph(10) # TODO 2 regler une vitesse pas trop rapide
         else:
             # TODO 1 les delay 360 cidessous devraient evoluer selon la variation effective du ph...
             # ou le PWM ...
@@ -390,38 +468,31 @@ class Manager(MyClass, Debug, threading.Thread):
                 self.ph.delay -= 1
                 if self.ph.delay <= 0 and self.state.ph:
                     self.ph.delay =  360 / self.REFRESH_TICK # Delay inter-injection
-                    self.cmd.ph(0)
-                    self.state.ph = False
+                    self.state.ph = self.cmd.ph(0)
             else:
                 if self.ph.current > self.ph.idle:
-                    self.cmd.ph(50)
-                    self.state.ph = True
+                    self.state.ph = self.cmd.ph(50)
                     self.ph.delay =  360 / self.REFRESH_TICK # Delay injection
             if self.ph.current < self.ph.min:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau du PH est trop bas!")
-                self.cmd.ph(0)
-                self.state.ph = False
+                self.state.ph = self.cmd.ph(0)
             elif self.ph.current > self.ph.max:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau du PH est trop haut!")
 
     def updateORPState(self):
         if self.mode.orp == self.OFF_STATE:
-            self.cmd.cl(0)
-            self.state.orp = False
+            self.state.orp = self.cmd.cl(0)
         elif self.mode.orp == self.ON_STATE:
-            self.cmd.cl(50)
-            self.state.orp = True
+            self.state.orp = self.cmd.cl(10) # TODO 2 regler une vitesse pas trop rapide
         else:
             if self.orp.delay > 0:
                 self.orp.delay -= 1
                 if self.orp.delay <= 0 and self.state.orp:
                     self.orp.delay =  360 / self.REFRESH_TICK # Delay inter-injection
-                    self.cmd.cl(0)
-                    self.state.orp = False
+                    self.state.orp = self.cmd.cl(0)
             else:
                 if self.orp.current < self.orp.idle:
-                    self.cmd.cl(50)
-                    self.state.orp = True
+                    self.state.orp = self.cmd.cl(50)
                     # TODO 1 les delay 360 cidessous devraient evoluer selon la variation effective de l'orp...
                     # ou le PWM ...
                     self.orp.delay =  360 / self.REFRESH_TICK # Delay injection
@@ -429,8 +500,7 @@ class Manager(MyClass, Debug, threading.Thread):
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau de l'ORP trop bas!")
             elif self.orp.current > self.orp.max:
                 self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau de l'ORP trop haut!")
-                self.cmd.cl(0)
-                self.state.orp = False
+                self.state.orp = self.cmd.cl(0)
 
     def updateWaterFillingState(self):
         if self.mode.filling == self.OFF_STATE:
@@ -470,4 +540,3 @@ if __name__ == '__main__':
         manager.stop()
 
 # TODO 2 mettre en parametre de server.py le path /media/pi/data
-# TODO 2 ajouter la liste des numero de mobile dans la data base + setting web

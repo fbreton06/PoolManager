@@ -3,9 +3,12 @@ import smbus
 from helper import *
 
 class CAN(Debug):
-    def __init__(self,  address,  busType=1):
+    def __init__(self,  address, bus=None):
         Debug.__init__(self)
-        self.__bus = smbus.SMBus(busType)
+        if bus == None:
+            self.__bus = smbus.SMBus(1)
+        else:
+            self.__bus = bus
         self.__address = address
 
     def read(self, entry):

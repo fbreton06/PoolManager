@@ -3,11 +3,14 @@ import time, sys, smbus
 from helper import *
 
 class LCD(Debug):
-    def __init__(self, address, backlight=False):
+    def __init__(self, address, backlight=False, bus=None):
         Debug.__init__(self)
+        if bus == None:
+            self.__bus = smbus.SMBus(1)
+        else:
+            self.__bus = bus
         self.__address = address
-        self.__smbus = smbus.SMBus(1)
-        self.__backlight = backlight
+        self.__backlight = False
         self.__send_command(0x33) # Must initialize to 8-line mode at first
         time.sleep(0.005)
         self.__send_command(0x32) # Then initialize to 4-line mode
@@ -16,17 +19,17 @@ class LCD(Debug):
         time.sleep(0.005)
         self.__send_command(0x0C) # Enable display without cursor
         time.sleep(0.005)
-        self.__send_command(0x01) # Clear Screen
-        self.__smbus.write_byte(self.__address, 0x08)
+        self.clear()
+        self.light(backlight)
 
     def __del__(self):
-        self.__smbus.close()
+        self.__bus.close()
 
     def __write_word(self, address, data):
         if self.__backlight:
-            self.__smbus.write_byte(address, data | 0x08)
+            self.__bus.write_byte(address, data | 0x08)
         else:
-            self.__smbus.write_byte(address, data & 0xF7)
+            self.__bus.write_byte(address, data & 0xF7)
 
     def __send_command(self, command):
         # Send bit7-4 firstly
@@ -68,9 +71,9 @@ class LCD(Debug):
         if backlight != None:
             self.__backlight = bool(backlight)
             if self.__backlight:
-                self.__smbus.write_byte(self.__address, 0x08)
+                self.__bus.write_byte(self.__address, 0x08)
             else:
-                self.__smbus.write_byte(self.__address, 0x00)
+                self.__bus.write_byte(self.__address, 0x00)
         return self.__backlight
 
     def write(self, row, column, message):

@@ -21,7 +21,7 @@ class Temperature(Debug):
 
 if __name__ == "__main__":
     try:
-        temp = Temperature()
+        temp = Temperature("28-0417716a37ff")
         while True:
             print "Temperature: %.2fC" % temp.read()
             time.sleep(1.0)
