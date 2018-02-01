@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import os, time, sys, types, threading
 from datetime import date
+
 if __name__ == "__main__":
     path = os.getcwd()
 else:
@@ -52,7 +53,6 @@ class Manager(MyClass, Debug, threading.Thread):
     DEFAULT_CRITICAL = 1
     DEFAULT_IMPORTANT = 2
     DEFAULT_INFORMATION = 3
-    FILLING_DEBOUNCE_TICK = 30
     DATABASE_SAVE_TICK = 360 # 1h
     LCD_LIGHT_TICK = 30 # 5mn
     REFRESH_TICK = 10 # in second
@@ -63,10 +63,13 @@ class Manager(MyClass, Debug, threading.Thread):
     PUMP_MODES = ("OFF", "ON", "AUTO")
     ROTARY_EVENT_GPIO_PIN = 22
     ROTARY_SWITCH_GPIO_PIN = 24
+    PH_PWM_PERCENT = 10
+    CL_PWM_PERCENT = 10
     def __init__(self):
         Debug.__init__(self, Debug.ERROR)
         threading.Thread.__init__(self)
         self.__event = threading.Event()
+        GPIO.cleanup()
         GPIO.setmode(GPIO.BCM)
         self.cmd = Command()
         self.cmd.debug_level = self.debug_level
@@ -87,6 +90,7 @@ class Manager(MyClass, Debug, threading.Thread):
         self.autoSaveTick = 0
         self.__today = date.today().day - 1
         self.lcdMenu = "default"
+        self.TRACE(Debug.INFO, "Initialisation done (%s)\n", self.getVerbosity())
 
     def __del__(self):
         GPIO.cleanup()
@@ -103,7 +107,8 @@ class Manager(MyClass, Debug, threading.Thread):
         return text
 
     def lcdDisplay(self, menu=None):
-        #print self.lcdMenu, menu
+        self.TRACE(Debug.DEBUG, "Menu change: %s -> %s\n", self.lcdMenu, menu)
+        #print 
         if menu != None:
             self.lcdMenu = menu
         self.lcd.clear()
@@ -150,14 +155,17 @@ class Manager(MyClass, Debug, threading.Thread):
             self.lcd.write(1, 0, "Back")
 
     def __phCalibrationDone(self):
+        self.TRACE(Debug.DEBUG, "PH calibration time elapsed\n")
         self.ph.offset = self.lcdValue - self.ph.current
         self.lcdDisplay("ph_done")
 
     def __orpCalibrationDone(self):
+        self.TRACE(Debug.DEBUG, "ORP calibration time elapsed\n")
         self.orp.offset = self.lcdValue - self.orp.current
         self.lcdDisplay("orp_done")
 
     def __validButton(self, pin, state):
+        self.TRACE(Debug.DEBUG, "Rotary switch event: %s\n", state)
         if state == True:
             self.lcdLightTimer = self.LCD_LIGHT_TICK
             if not self.lcd.light():
@@ -205,6 +213,7 @@ class Manager(MyClass, Debug, threading.Thread):
                     self.lcdDisplay("orp")
 
     def __rotaryMove(self, position, delta):
+        self.TRACE(Debug.DEBUG, "Rotary change event: %d(%d)\n", position, delta)
         self.lcdLightTimer = self.LCD_LIGHT_TICK
         if not self.lcd.light():
             self.lcd.light(True)
@@ -256,10 +265,9 @@ class Manager(MyClass, Debug, threading.Thread):
                 self.lcdDisplay()
 
     def __waterMoveDetect(self, pin, detected):
+        self.TRACE(Debug.DETAIL, "Water move event: %s\n", detected)
         if not detected and self.cmd.pump:
-            time.sleep(2) # TODO 2 a voir a l'usage
-            if not self.info.getLiquidMoveState():
-                self.newDefault(self.DEFAULT_CRITICAL, "Circulation de l'eau impossible. Verifiez les vannes!")
+            self.newDefault(self.DEFAULT_CRITICAL, "Water seems to be blocked! Check valves state!")
 
     def __computSchedulingTime(self, startHour, startMn, duration):
         start = startHour * 60 + startMn
@@ -272,7 +280,7 @@ class Manager(MyClass, Debug, threading.Thread):
         self.program.auto = list()
         if temperature < self.temp.winter:
             # ...-Winter[ : 2H
-            self.newDefault(self.DEFAULT_INFORMATION, "Hivernage!")
+            self.newDefault(self.DEFAULT_INFORMATION, "Wintering!")
             self.program.auto.append("12:00\t14:00")
         elif temperature < 12.0:
             # [Winter-12[ : 4H
@@ -339,9 +347,9 @@ class Manager(MyClass, Debug, threading.Thread):
             with self.__i2c.lock:
                 self.pressure.current = self.info.getPressure()
             if self.pressure.current > self.pressure.critical:
-                self.newDefault(self.DEFAULT_IMPORTANT, "Pression trop importante. Nettoyez les filtres en urgence!")
+                self.newDefault(self.DEFAULT_IMPORTANT, "Pressure too high. Clean filters urgently!")
             elif self.pressure.current > self.pressure.max:
-                self.newDefault(self.DEFAULT_INFORMATION, "Pression trop grande. Pensez a nettoyer les filtres!")
+                self.newDefault(self.DEFAULT_INFORMATION, "Pressure is high. Think to clean filters")
             # Pump auto-schedulling
             self.__computePumpScheduling(self.temp.max)
             self.temp.max = -50.0
@@ -368,37 +376,42 @@ class Manager(MyClass, Debug, threading.Thread):
             self.__refresh()
             self.TRACE(self.DEBUG, str(self))
             self.__event.wait(self.REFRESH_TICK)
-        self.join()
+        self.TRACE(Debug.DETAIL, "Manager thread is stopped\n")
 
     def start(self):
-        self.fillingTickTimer = -1
         super(Manager, self).start()
+        self.TRACE(Debug.DETAIL, "Manager thread is started\n")
 
     def stop(self):
         self.__event.set()
 
     def newDefault(self, level, message):
+        self.TRACE(Debug.DETAIL, "Add default \"%s\" in the defaults list\n", message)
         today = date.today()
         default = "%s %s %s %d %s" % (date.strftime(today, "%d %B %Y"), date.strftime(today, "%A"), time.strftime("%H:%M"), level, message)
         self.state.defaults.append(default)
-        if level == self.DEFAULT_CRITICAL:
-            self.stopPump()
+        if level == self.DEFAULT_CRITICAL and self.state.pump:
+            self.stopPump("Emergency: %s" % message)
 
-    def startPump(self):
+    def startPump(self, reason=""):
+        self.TRACE(Debug.DETAIL, "Pump is started: %s\n", reason)
         self.state.pump = self.cmd.pump = True
         time.sleep(2) # TODO 2 a voir a l'usage
         if not self.info.getLiquidMoveState():
-            self.newDefault(self.DEFAULT_CRITICAL, "Circulation de l'eau impossible. Verifiez les vannes!")
+            self.newDefault(self.DEFAULT_CRITICAL, "Water seems to be blocked! Check valves state!")
 
-    def stopPump(self, delay_s=0):
+    def stopPump(self, reason, delay_s=0):
         self.state.robot = self.cmd.robot = False
+        self.TRACE(Debug.DETAIL, "PH injection is stopped: %s\n", reason)
         self.state.ph = self.cmd.ph(0)
+        self.TRACE(Debug.DETAIL, "Chlore injection is stopped: %s\n", reason)
         self.state.orp = self.cmd.cl(0)
-        if delay_s:
-            time.sleep(delay_s) # TODO 2 a voir a l'usage
-        else:
-            # Emergency stop!
+        if delay_s == 0:
+            # Emergency stop! We must to prevent the pump to restart
             self.mode.pump = self.OFF_STATE
+        else:
+            time.sleep(delay_s) # TODO 2 a voir a l'usage
+        self.TRACE(Debug.DETAIL, "Pump is stopped: %s (delay=%ds)\n", reason, delay_s)
         self.state.pump = self.cmd.pump = False
 
     def appendProgram(self, kind, entry):
@@ -419,9 +432,11 @@ class Manager(MyClass, Debug, threading.Thread):
 
     def updatePumpState(self):
         if self.mode.pump == self.OFF_STATE:
-            self.stopPump(2)
+            if self.state.pump:
+                self.stopPump("Forced to OFF", 2)
         elif self.mode.pump == self.ON_STATE:
-            self.startPump()
+            if not self.state.pump:
+                self.startPump("Forced to ON")
         else:
             if self.mode.program:
                 pumps = self.program.auto
@@ -435,17 +450,20 @@ class Manager(MyClass, Debug, threading.Thread):
                         pump = True
             if not self.cmd.pump ^ pump:
                 if pump:
-                    self.startPump()
+                    self.startPump("Automatic mode")
                 else:
-                    self.stopPump(2)
-        # Done by start/stop function: self.state.pump = self.cmd.pump
+                    self.stopPump("Automatic mode", 2)
         return self.cmd.pump
 
     def updateRobotState(self):
         if self.mode.robot == self.OFF_STATE:
-            self.cmd.robot = False
+            if self.state.robot:
+                self.TRACE(Debug.DETAIL, "Robot is stopped: Forced to OFF\n")
+                self.cmd.robot = False
         elif self.mode.robot == self.ON_STATE:
-            self.cmd.robot = True
+            if not self.state.robot:
+                self.TRACE(Debug.DETAIL, "Robot is started: Forced to ON\n")
+                self.cmd.robot = True
         else:
             robot = False
             now = time.strftime("%H:%M")
@@ -453,83 +471,93 @@ class Manager(MyClass, Debug, threading.Thread):
                 for start, stop in [x.split() for x in self.program.robots]:
                     if start <= now < stop:
                         robot = True
-            self.cmd.robot = robot
+            if not self.cmd.robot ^ robot:
+                self.TRACE(Debug.DETAIL, "Robot is %s: Automatic mode\n" % ["stopped", "started"][robot])
+                self.cmd.robot = robot
         self.state.robot = self.cmd.robot
 
     def updatePHState(self):
         if self.mode.ph == self.OFF_STATE:
-            self.state.ph = self.cmd.ph(0)
+            if self.state.ph:
+                self.TRACE(Debug.DETAIL, "PH injection is stopped: Forced to OFF\n")
+                self.state.ph = self.cmd.ph(0)
         elif self.mode.ph == self.ON_STATE:
-            self.state.ph = self.cmd.ph(10) # TODO 2 regler une vitesse pas trop rapide
+            if not self.state.ph:
+                self.TRACE(Debug.DETAIL, "PH injection is started: Forced to ON (speed=%d%)\n", self.PH_PWM_PERCENT)
+                self.state.ph = self.cmd.ph(self.PH_PWM_PERCENT) # TODO 2 regler une vitesse pas trop rapide
         else:
             # TODO 1 les delay 360 cidessous devraient evoluer selon la variation effective du ph...
             # ou le PWM ...
             if self.ph.delay > 0:
                 self.ph.delay -= 1
                 if self.ph.delay <= 0 and self.state.ph:
+                    self.TRACE(Debug.DETAIL, "PH injection is stopped: Automatic mode\n")
                     self.ph.delay =  360 / self.REFRESH_TICK # Delay inter-injection
                     self.state.ph = self.cmd.ph(0)
             else:
                 if self.ph.current > self.ph.idle:
-                    self.state.ph = self.cmd.ph(50)
+                    self.TRACE(Debug.DETAIL, "PH injection is started: Automatic mode (speed=%d%)\n", self.PH_PWM_PERCENT)
+                    self.state.ph = self.cmd.ph(self.PH_PWM_PERCENT)
                     self.ph.delay =  360 / self.REFRESH_TICK # Delay injection
             if self.ph.current < self.ph.min:
-                self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau du PH est trop bas!")
+                self.newDefault(self.DEFAULT_IMPORTANT, "PH level too low!")
+                self.TRACE(Debug.DETAIL, "PH injection is stopped: PH level too low\n")
                 self.state.ph = self.cmd.ph(0)
             elif self.ph.current > self.ph.max:
-                self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau du PH est trop haut!")
+                self.newDefault(self.DEFAULT_IMPORTANT, "PH level too high!")
 
     def updateORPState(self):
         if self.mode.orp == self.OFF_STATE:
-            self.state.orp = self.cmd.cl(0)
+            if self.state.orp:
+                self.TRACE(Debug.DETAIL, "Chlore injection is stopped: Forced to OFF\n")
+                self.state.orp = self.cmd.cl(0)
         elif self.mode.orp == self.ON_STATE:
-            self.state.orp = self.cmd.cl(10) # TODO 2 regler une vitesse pas trop rapide
+            if not self.state.orp:
+                self.TRACE(Debug.DETAIL, "Chlore injection is started: Forced to ON (speed=%d%)\n", self.CL_PWM_PERCENT)
+                self.state.orp = self.cmd.cl(self.CL_PWM_PERCENT) # TODO 2 regler une vitesse pas trop rapide
         else:
             if self.orp.delay > 0:
                 self.orp.delay -= 1
                 if self.orp.delay <= 0 and self.state.orp:
                     self.orp.delay =  360 / self.REFRESH_TICK # Delay inter-injection
+                    self.TRACE(Debug.DETAIL, "Chlore injection is stopped: Automatic mode\n")
                     self.state.orp = self.cmd.cl(0)
             else:
                 if self.orp.current < self.orp.idle:
-                    self.state.orp = self.cmd.cl(50)
+                    self.TRACE(Debug.DETAIL, "Chlore injection is started: Automatic mode (speed=%d%)\n", self.CL_PWM_PERCENT)
+                    self.state.orp = self.cmd.cl(self.CL_PWM_PERCENT)
                     # TODO 1 les delay 360 cidessous devraient evoluer selon la variation effective de l'orp...
                     # ou le PWM ...
                     self.orp.delay =  360 / self.REFRESH_TICK # Delay injection
             if self.orp.current < self.orp.min:
-                self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau de l'ORP trop bas!")
+                self.newDefault(self.DEFAULT_IMPORTANT, "ORP level too low!")
             elif self.orp.current > self.orp.max:
-                self.newDefault(self.DEFAULT_IMPORTANT, "Le niveau de l'ORP trop haut!")
+                self.newDefault(self.DEFAULT_IMPORTANT, "ORP level too high!")
+                self.TRACE(Debug.DETAIL, "Chlore injection is stopped: ORP level too high\n")
                 self.state.orp = self.cmd.cl(0)
 
     def updateWaterFillingState(self):
         if self.mode.filling == self.OFF_STATE:
-            self.cmd.fill = False
+            if self.state.filling:
+                self.TRACE(Debug.DETAIL, "Filling pool is stopped: Forced to OFF\n")
+                self.cmd.fill = False
         elif self.mode.filling == self.ON_STATE:
-            self.cmd.fill = True
+            if not self.state.filling:
+                self.TRACE(Debug.DETAIL, "Filling pool is started: Forced to ON\n")
+                self.cmd.fill = True
         else:
-            if self.fillingTickTimer > 0:
-                self.fillingTickTimer -= 1
-            if self.cmd.fill == self.info.getLiquidLevelState():
-                if self.fillingTickTimer < 0:
-                    now = time.strftime("%H:%M")
-                    if now > "23:00" or now < "07:00":
-                        self.fillingTickTimer = self.FILLING_DEBOUNCE_TICK
-                        self.TRACE(self.DEBUG, "Start water level detection debounce mechanism for %ds",
-                                   self.FILLING_DEBOUNCE_TICK * self.REFRESH_TICK)
-                elif self.fillingTickTimer == 0:
-                    self.TRACE(self.DEBUG, "Valid water level detection")
+            now = time.strftime("%H:%M")
+            if now > "21:00" or now < "07:00": # Start only when no one is in the pool
+                if self.cmd.fill == self.info.getLiquidLevelState():
+                    self.TRACE(self.DETAIL, "Filling pool is %: Water level detection", ["started", "stopped"][self.cmd.fill])
                     self.cmd.fill = not self.cmd.fill
-            else: # Low water level detected
-                if self.fillingTickTimer > 0:
-                    self.fillingTickTimer = -1
-                    self.TRACE(self.DEBUG, "Cancel water level detection debounce mechanism")
         self.state.filling = self.cmd.fill
 
     def light(self, value=None):
         if not value is None:
             self.cmd.light = bool(value)
             self.state.light = self.cmd.light
+            self.TRACE(Debug.DETAIL, "Lights: %s\n", ["ON", "OFF"][self.state.light])
         return self.cmd.light
 
 if __name__ == '__main__':

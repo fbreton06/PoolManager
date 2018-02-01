@@ -3,7 +3,7 @@ import os, time, sys, types
 sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
 from helper import Debug
 
-import ds18b20
+import ds18b20, smbus, button
 from Adafruit_ADS1x15 import ADS1115 # sudo pip install adafruit-ads1x15
 import RPi.GPIO as GPIO
 
@@ -103,17 +103,28 @@ class Information(Debug):
     PSI_CAN_PIN = 3
     LIQUID_LEVEL_GPIO_PIN = 25
     LIQUID_MOVE_GPIO_PIN = 12
-    def __init__(self, moveDetectCb, debounce_ms=200):
+    FILLING_DEBOUNCE_TIME_S = 300 # 5mn
+    def __init__(self, moveDetectCb, debounce_ms=200, deviceTemp="28-0417716a37ff"):
         Debug.__init__(self)
         self.__can = ADS1115(0x49)
+        self.__level_time = 0
         GPIO.setup(self.LIQUID_LEVEL_GPIO_PIN, GPIO.IN)
-        GPIO.setup(self.LIQUID_MOVE_GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        self.__temp = ds18b20.Temperature("28-0417716a37ff")
+        GPIO.add_event_detect(self.LIQUID_LEVEL_GPIO_PIN, GPIO.BOTH, callback=self.__levelDetect, bouncetime=debounce_ms)
+        self.__level = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN)
         self.__moveDetectCb = moveDetectCb
+        GPIO.setup(self.LIQUID_MOVE_GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(self.LIQUID_MOVE_GPIO_PIN, GPIO.BOTH, callback=self.__moveDetect, bouncetime=debounce_ms)
+        self.__temp = ds18b20.Temperature(deviceTemp)
 
     def __moveDetect(self, pin):
         self.__moveDetectCb(pin, GPIO.input(pin))
+
+    def __levelDetect(self, pin):
+        if self.__level != GPIO.input(self.LIQUID_LEVEL_GPIO_PIN):
+            if self.__level_time == 0:
+                self.__level_time = time.time()
+        else:
+            self.__level_time = 0
 
     def __readAnalog(self, pin):
         value = None
@@ -128,7 +139,11 @@ class Information(Debug):
         return not GPIO.input(self.LIQUID_MOVE_GPIO_PIN)
 
     def getLiquidLevelState(self):
-        return GPIO.input(self.LIQUID_LEVEL_GPIO_PIN)
+        if self.__level_time > 0:
+            if int(time.time() - self.__level_time) > self.FILLING_DEBOUNCE_TIME_S:
+                self.__level = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN)
+                self.__level_time = 0
+        return self.__level
 
     def getTemperature(self):
         return self.__temp.read()
@@ -201,23 +216,31 @@ class Command(Debug):
 def WaterMoveDetection(pin, detected):
     print "Circulation d'eau en cours: %s" % ["NON", "OUI"][detected]
 
-#def RotaryCb(pos, delta):
-    #print delta
+def RotaryCb(pos, delta):
+    print delta
 
-#def ButtonCb(pin, value):
-    #print value
+def ButtonCb(pin, value):
+    print value
+
+#def __UpdateFakeTemp(value):
+    #filepath = os.path.join(os.getcwd(), "fakeTemp.txt")
+    #hdl = open(filepath, "wt")  
+    #data = "56 01 4b 46 7f ff 0c 10 7b : crc=7b YES\n"                                                     
+    #data += "56 01 4b 46 7f ff 0c 10 7b t=%d\n" % int(float(value) * 1000)
+    #hdl.write(data)
+    #hdl.close()
+    #return filepath
 
 if __name__ == '__main__':
     try:
+        GPIO.cleanup()
         GPIO.setmode(GPIO.BCM)
-        #if False:
-            #rotary = Rotary(False, 22, RotaryCb)
-            ##rotary = Rotary(True, 22, RotaryCb, 0, 1000,-1000)
-            #button = button.Button(24, 200, ButtonCb)
-            #while True:
-                #time.sleep(5)
-            #assert False, ""
+        rotary = Rotary(False, 22, RotaryCb)
+        #rotary = Rotary(True, 22, RotaryCb, 0, 1000,-1000) # Bounded case
+        button = button.Button(24, 200, ButtonCb)
         cmd = Command()
+        #temp = 20
+        #info = Information(WaterMoveDetection, deviceTemp=__UpdateFakeTemp(temp))
         info = Information(WaterMoveDetection)
         while True:
             pressure = info.getPressure()
@@ -235,6 +258,8 @@ if __name__ == '__main__':
             cmd.Open = (bitmap & 0x40) == 0
             cmd.cloSE = (bitmap & 0x80) == 0
             time.sleep(1.0)
+            #temp += 0.1
+            #__UpdateFakeTemp(temp)
     except KeyboardInterrupt:
         pass
     GPIO.cleanup()

@@ -2,13 +2,22 @@
 import types
 
 class Debug(object):
+    VERBOSITY = ("Unknown", "NONE", "INFO", "ERROR", "DETAIL", "DEBUG", "DUMP")
     NONE = 1
     INFO = 2
     ERROR = 3
     DETAIL = 4
     DEBUG = 5
+    DUMP = 6
     def __init__(self,  level=NONE):
+        assert level > 0, "Unexpected debug level value: %s" % level
         self.debug_level = level
+
+    def getVerbosity(self):
+        try:
+            return self.VERBOSITY[self.debug_level]
+        except:
+            return self.VERBOSITY[0]
 
     def TAG(self, level, name, width=25, deco='#'):
         if self.debug_level >= level:
