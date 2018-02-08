@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import os, time, sys, types
+import os, time, sys, types, threading
 sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
 from helper import Debug
 
@@ -103,28 +103,20 @@ class Information(Debug):
     PSI_CAN_PIN = 3
     LIQUID_LEVEL_GPIO_PIN = 25
     LIQUID_MOVE_GPIO_PIN = 12
-    FILLING_DEBOUNCE_TIME_S = 300 # 5mn
-    def __init__(self, moveDetectCb, debounce_ms=200, deviceTemp="28-0417716a37ff"):
+    LIQUID_MOVE_DEBOUNCE_TIME_S = 0.5
+    LIQUID_LEVEL_DEBOUNCE_TIME_S = 300 # 5mn
+    def __init__(self, moveDetectCb, debounce_ms=10, deviceTemp="28-0417716a37ff"):
         Debug.__init__(self)
         self.__can = ADS1115(0x49)
-        self.__level_time = 0
+        self.__levelDebounce = None
         GPIO.setup(self.LIQUID_LEVEL_GPIO_PIN, GPIO.IN)
         GPIO.add_event_detect(self.LIQUID_LEVEL_GPIO_PIN, GPIO.BOTH, callback=self.__levelDetect, bouncetime=debounce_ms)
-        self.__level = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN)
-        self.__moveDetectCb = moveDetectCb
+        self.__liquidLevelState = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN) == GPIO.HIGH
+        self.__moveDebounce = None
         GPIO.setup(self.LIQUID_MOVE_GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(self.LIQUID_MOVE_GPIO_PIN, GPIO.BOTH, callback=self.__moveDetect, bouncetime=debounce_ms)
+        self.__moveDetectCb = moveDetectCb
         self.__temp = ds18b20.Temperature(deviceTemp)
-
-    def __moveDetect(self, pin):
-        self.__moveDetectCb(pin, GPIO.input(pin))
-
-    def __levelDetect(self, pin):
-        if self.__level != GPIO.input(self.LIQUID_LEVEL_GPIO_PIN):
-            if self.__level_time == 0:
-                self.__level_time = time.time()
-        else:
-            self.__level_time = 0
 
     def __readAnalog(self, pin):
         value = None
@@ -135,15 +127,51 @@ class Information(Debug):
                 pass
         return (4096 * value) / 0x7FFF
 
+    def __moveDebounced(self):
+        self.__moveDebounce = None
+        if self.__moveState == self.getLiquidMoveState():
+            self.__moveDetectCb(self.LIQUID_MOVE_GPIO_PIN, self.__moveState)
+        else:
+            self.__moveDetect(self.LIQUID_MOVE_GPIO_PIN)
+
+    def __moveDetect(self, pin):
+        if self.__moveDebounce == None:
+            self.__moveState = self.getLiquidMoveState()
+            self.__moveDebounce = threading.Timer(self.LIQUID_MOVE_DEBOUNCE_TIME_S, self.__moveDebounced)
+            self.__moveDebounce.start()
+        elif self.__moveState != self.getLiquidMoveState():
+            self.__moveDebounce.cancel()
+            self.__moveState = not self.__moveState
+            self.__moveDebounce = threading.Timer(self.LIQUID_MOVE_DEBOUNCE_TIME_S, self.__moveDebounced)
+            self.__moveDebounce.start()
+        # else Fake event
+
+    def __levelDebounced(self):
+        self.__levelDebounce = None
+        liquidLevelState = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN) == GPIO.HIGH
+        if self.__levelState == liquidLevelState:
+            self.__liquidLevelState = liquidLevelState
+        else:
+            self.__levelDetect(self.LIQUID_LEVEL_GPIO_PIN)
+
+    def __levelDetect(self, pin):
+        liquidLevelState = GPIO.input(pin) == GPIO.HIGH
+        if self.__levelDebounce == None:
+            self.__levelState = liquidLevelState
+            self.__levelDebounce = threading.Timer(self.LIQUID_LEVEL_DEBOUNCE_TIME_S, self.__levelDebounced)
+            self.__levelDebounce.start()
+        elif self.__levelState != liquidLevelState:
+            self.__levelDebounce.cancel()
+            self.__levelState = not self.__levelState
+            self.__levelDebounce = threading.Timer(self.LIQUID_LEVEL_DEBOUNCE_TIME_S, self.__levelDebounced)
+            self.__levelDebounce.start()
+        # else Fake event
+
     def getLiquidMoveState(self):
-        return not GPIO.input(self.LIQUID_MOVE_GPIO_PIN)
+        return GPIO.input(self.LIQUID_MOVE_GPIO_PIN) == GPIO.LOW
 
     def getLiquidLevelState(self):
-        if self.__level_time > 0:
-            if int(time.time() - self.__level_time) > self.FILLING_DEBOUNCE_TIME_S:
-                self.__level = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN)
-                self.__level_time = 0
-        return self.__level
+        return self.__liquidLevelState
 
     def getTemperature(self):
         return self.__temp.read()
@@ -151,19 +179,19 @@ class Information(Debug):
     def getPHLevel(self, temperature=None):
         phMeasure = self.__readAnalog(self.PH_CAN_PIN)
         if temperature is None:
-            return (3560 * phMeasure - 1889) / 1000.0
+            return (3.56 * phMeasure - 1889) / 1000.0
         return 7 - ((2500 - phMeasure) / (257.179 + 0.941468 * temperature))
 
     def getORPLevel(self):
         orpMeasure = self.__readAnalog(self.ORP_CAN_PIN)
-        return int((2500 - orpMeasure) / 1.037)
+        return int((2500 - orpMeasure) / 1.037) # mV
 
-    def getPressure(self):
+    def getPressure(self, psiUnit=False):
         # linear: 0psi=0.5v, 30psi=4.5v => psi = (3 * Umv - 1500) / 400
         psiMeasure = self.__readAnalog(self.PSI_CAN_PIN)
         psi = (3 * psiMeasure - 1500) / 400
         # Conversion en PSI -> Bar
-        return psi * 0.06894745
+        return [psi * 0.06894745, psi][psiUnit]
 
 class Command(Debug):
     RELAY_GPIO_PIN = {"pump":26, "robot":19, "light":13, "fill":23, "open":5, "close":6}
@@ -224,8 +252,8 @@ def ButtonCb(pin, value):
 
 #def __UpdateFakeTemp(value):
     #filepath = os.path.join(os.getcwd(), "fakeTemp.txt")
-    #hdl = open(filepath, "wt")  
-    #data = "56 01 4b 46 7f ff 0c 10 7b : crc=7b YES\n"                                                     
+    #hdl = open(filepath, "wt")
+    #data = "56 01 4b 46 7f ff 0c 10 7b : crc=7b YES\n"
     #data += "56 01 4b 46 7f ff 0c 10 7b t=%d\n" % int(float(value) * 1000)
     #hdl.write(data)
     #hdl.close()
@@ -242,14 +270,14 @@ if __name__ == '__main__':
         #temp = 20
         #info = Information(WaterMoveDetection, deviceTemp=__UpdateFakeTemp(temp))
         info = Information(WaterMoveDetection)
-        while True:
+        for bitmap in (0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x00, 0x3F, 0x00, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01, 0x00):
             pressure = info.getPressure()
             print "Pressure: %.1fpsi / %.1fBar" % (pressure * 14.5038, pressure)
             print "Temperature: %.1fC" % info.getTemperature()
             print "Niveau du PH: %.1f" % info.getPHLevel()
+            print "Niveau du PH at 25C: %.1f" % info.getPHLevel(25)
             print "Niveau d'ORP: %dmV" % info.getORPLevel()
-            print "Niveau d'eau trop bas: %s" % ["NON", "OUI"][not info.getLiquidLevelState()]
-            bitmap = int(time.time() * 1000) & 0xFF
+            print "Niveau d'eau OK: %s" % ["NON", "OUI"][info.getLiquidLevelState()]
             print hex(bitmap)
             cmd.Pump = (bitmap & 0x01) == 0
             cmd.robot = (bitmap & 0x02) == 0

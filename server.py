@@ -82,7 +82,7 @@ class Handler(CGIHTTPRequestHandler):
         html = html.replace("LEDFILL", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.filling])
         html = html.replace("LEDLIGHT", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.light])
         html = html.replace("LEDOPEN", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.open])
-        html = html.replace("LEDDEFAULT", self.RESPATH + "led_red%s.png" % ["-off", ""][len(self.manager.state.defaults) > 0])
+        html = html.replace("LEDDEFAULT", self.RESPATH + "led_red%s.png" % ["-off", ""][len(self.manager.default) > 0])
         return html
 
     def switch(self, html, form):
@@ -99,8 +99,8 @@ class Handler(CGIHTTPRequestHandler):
             for idx in range(len(options)):
                 html = html.replace("SELECT" + kind.upper() + str(idx), ["","selected"][options[idx]])
         if form.has_key("light.x"):
-            self.manager.state.light = not self.manager.state.light
-        html = html.replace("LIGHTSWITCH", self.RESPATH + "light%s.png" % ["OFF", "ON"][self.manager.state.light])
+            self.manager.light(not self.manager.light())
+        html = html.replace("LIGHTSWITCH", self.RESPATH + "light%s.png" % ["OFF", "ON"][self.manager.light()])
         return html
 
     def program(self, html, form):
@@ -113,7 +113,7 @@ class Handler(CGIHTTPRequestHandler):
         for idx in range(0, 60, 15):
             minute += "\t" * 5 + "<option value=\"%d\">%02d</option>" % (idx, idx)
         html = html.replace("OPTIONMINUTE", minute)
-        # TODO 2 il faudrai eviter de reinit la combo a 00:00 a chaque POST
+        # TODO 2 il faudrait eviter la reinit de la combo a 00:00 a chaque POST
         # Manage pump list only in manual mode
         if form.has_key("x") and form.has_key("y"):
             self.manager.mode.program = not self.manager.mode.program

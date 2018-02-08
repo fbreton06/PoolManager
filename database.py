@@ -10,7 +10,7 @@ class Database(Debug, ConfigParser.ConfigParser):
                 "orp":{"current":0,"offset":0,"min":350,"idle":650,"max":950,"delay":0,"lbound":-2000,"ubound":2000},
                 "temp":{"current":0.0,"winter":10.0,"max":-50.0},
                 "pressure":{"current":0.0,"max":1.3,"critical":1.5},
-                "state":{"pump":False,"robot":False,"ph":False,"orp":False,"filling":False,"light":False,"open":False,"defaults":[]},
+                "state":{"pump":False,"robot":False,"ph":False,"orp":False,"filling":False,"light":False,"open":False},
                 "program":{"pumps":[],"robots":[]}}
     def __init__(self, filename="database.ini"):
         Debug.__init__(self)
@@ -94,8 +94,6 @@ if __name__ == '__main__':
         print database
         database.set("ph", "current", 7.3)
         print database.get("ph", "current")
-        database.clear("state", "defaults")
-        print database.get("state", "defaults")
         database.set("state", "pump", True)
         print database.get("state", "pump")
         print database

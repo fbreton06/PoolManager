@@ -19,7 +19,7 @@ if local:
     SERVER_ADDRESS = ("", 8080)
 else:
     CLIENT_ADDRESS = (GetIPAddress("eno1"), 7070)
-    SERVER_ADDRESS = ("192.168.0.41", 8080)
+    SERVER_ADDRESS = ("192.168.0.40", 8080)
 
 __lockCb = threading.RLock()
 __callbacks = dict()
