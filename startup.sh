@@ -27,5 +27,5 @@ else
 fi
 cd $ref_path/PoolSurvey;
 echo "Start server...";
-python $ref_path/server.py;
+python server.py $ref_path $data_path database.ini;
 
