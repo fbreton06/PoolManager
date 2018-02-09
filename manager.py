@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import os, time, sys, types, threading
-sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
+sys.path.append("lib")
 from datetime import date
 
 from helper import Debug
@@ -8,12 +8,6 @@ from helper import Debug
 #verbosity = Debug.ERROR
 verbosity = Debug.DEBUG
 #verbosity = Debug.DUMP
-
-if __name__ == "__main__":
-    path = os.getcwd()
-else:
-    path = os.path.dirname(__file__)
-sys.path.append(os.path.join(path, "lib"))
 
 from helper import Debug
 from hardware import Information, Command, Rotary
@@ -24,7 +18,6 @@ from lcd1602 import LCD
 import RPi.GPIO as GPIO
 
 try:
-    raise ErrorValue, "fake"
     from tmp import tmpClass as MyClass
 except:
     class MyClass:
@@ -119,17 +112,16 @@ class Manager(MyClass, Debug, threading.Thread):
     OFF_STATE = 0
     ON_STATE = 1
     AUTO_STATE = 2
-    SIMU = False
     PUMP_MODES = ("OFF", "ON", "AUTO")
     ROTARY_EVENT_GPIO_PIN = 22
     ROTARY_SWITCH_GPIO_PIN = 24
     PH_PWM_PERCENT = 10
     CL_PWM_PERCENT = 10
-    def __init__(self):
+    def __init__(self, refPath, dataPath, dbFilename):
         threading.Thread.__init__(self)
         self.__event = threading.Event()
-        Debug.__init__(self)
-        self.debug_level = verbosity
+        Debug.__init__(self, verbosity)
+        self.refPath = refPath
         GPIO.cleanup()
         GPIO.setmode(GPIO.BCM)
         self.cmd = Command()
@@ -141,7 +133,7 @@ class Manager(MyClass, Debug, threading.Thread):
         self.__button = button.Button(self.ROTARY_SWITCH_GPIO_PIN, 1000, self.__validButton, GPIO.RISING)        
         self.lcd = LCD(0x27, bus=self.__i2c)
         self.lcdLightTimer = 0
-        self.database = Database()
+        self.database = Database(dataPath, dbFilename)
         self.database.debug_level = verbosity
         for section in self.database.sections():
             assert not self.__dict__.has_key(section), "Member name \"%s\" conflict!" % section
@@ -408,7 +400,7 @@ class Manager(MyClass, Debug, threading.Thread):
             self.autoSaveTick = 0
             self.__databaseSave()
             # All seems to be OK, we can remove the previous version
-            backup = os.path.join(path, os.pardir, "PoolSurvey.bak")
+            backup = os.path.join(self.refPath, "PoolSurvey.bak")
             if os.path.exists(backup):
                 os.system("rm -frd %s" % backup)
         self.autoSaveTick += 1
@@ -643,5 +635,3 @@ if __name__ == '__main__':
         manager.start()
     except KeyboardInterrupt:
         manager.stop()
-
-# TODO 2 mettre en parametre de server.py le path /media/pi/data

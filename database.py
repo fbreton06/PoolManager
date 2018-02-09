@@ -12,25 +12,30 @@ class Database(Debug, ConfigParser.ConfigParser):
                 "pressure":{"current":0.0,"max":1.3,"critical":1.5},
                 "state":{"pump":False,"robot":False,"ph":False,"orp":False,"filling":False,"light":False,"open":False},
                 "program":{"pumps":[],"robots":[]}}
-    def __init__(self, filename="database.ini"):
+    def __init__(self, dataPath, dbFilename):
         Debug.__init__(self)
         self.lock = threading.RLock()
         ConfigParser.ConfigParser.__init__(self)
-        test = os.path.join("media", "pi", "data")
-        if os.path.isdir(os.path.join("media", "pi", "data")):
-            self.__filename = os.path.join("media", "pi", "data", filename)
-        else:
-            self.__filename = os.path.join(os.path.dirname(__file__), filename)
+        if not os.path.isdir(dataPath):
+            raise ValueError, "Undefined path: %s" % dataPath
+        self.__filename = os.path.join(dataPath, dbFilename)
+        self.__saved = os.path.join(dataPath, "saved")
         if not os.path.exists(self.__filename) and not os.path.exists(self.__filename + ".new"):
+            # Need to be created
             for section in self.SECTIONS:
                 self.add_section(section)
                 for key in self.SECTIONS[section]:
                     super(Database, self).set(section, key, str(self.SECTIONS[section][key]))
             self.backup()
         else:
-            if os.path.exists(self.__filename + ".new"):
-                os.rename(self.__filename + ".new", self.__filename)
             self.lock.acquire()
+            if os.path.isfile(self.__saved):
+                if os.path.isfile(self.__filename):
+                    os.remove(self.__filename)                
+                if os.path.isfile(self.__filename + ".new"):
+                    os.rename(self.__filename + ".new", self.__filename)
+            elif os.path.isfile(self.__filename + ".new"):
+                os.remove(self.__filename + ".new")
             self.read(self.__filename)
             self.lock.release()
 
@@ -80,8 +85,12 @@ class Database(Debug, ConfigParser.ConfigParser):
 
     def backup(self):
         self.lock.acquire()
+        if os.path.isfile(self.__saved):
+            os.remove(self.__saved)
         handle = open(self.__filename + ".new",'w')
         self.write(handle)
+        handle.close()
+        handle = open(__saved, "w")
         handle.close()
         if os.path.isfile(self.__filename):
             os.remove(self.__filename)

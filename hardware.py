@@ -1,11 +1,13 @@
 #!/usr/bin/python
 import os, time, sys, types, threading
-sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
-from helper import Debug
+sys.path.append(os.path.join(os.path.pardir, "RRaspPY"))
 
+sys.path.append("lib")
 import ds18b20, smbus, button
 from Adafruit_ADS1x15 import ADS1115 # sudo pip install adafruit-ads1x15
 import RPi.GPIO as GPIO
+
+from helper import Debug
 
 # Raspberry 3 I/O Mapping
 

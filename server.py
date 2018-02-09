@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import sys, re, os, zipfile, traceback
+from subprocess import Popen, PIPE, STDOUT
 
 from BaseHTTPServer import HTTPServer
 from CGIHTTPServer import CGIHTTPRequestHandler
@@ -13,6 +14,13 @@ cgitb.enable()
 MAJOR = 0
 MINOR = 1
 BUILD = 2
+
+try:
+    process = Popen("cat /etc/issue", stdout=PIPE, shell=True, stderr=STDOUT)
+    result = process.communicate()
+    isRaspberry = result[0].startswith("Rasp")
+except:
+    isRaspberry = False
 
 class Handler(CGIHTTPRequestHandler):
     SUCCESS = "Success"
@@ -214,7 +222,7 @@ class Handler(CGIHTTPRequestHandler):
                             os.remove(db_ini)
                     self.manager.stop()
                     html = html.replace("UPDATE_MESSAGE", "Update version (%d.%d.%d -> %d.%d.%d): %s!" % (MAJOR, MINOR, BUILD, major, minor, build, status))
-                    if not self.manager.SIMU:
+                    if isRaspberry:
                         os.system("sudo reboot")
                 except Exception, error:
                     status = "Unsupported file: %s" % error
@@ -226,9 +234,9 @@ class Handler(CGIHTTPRequestHandler):
         return html
 
 class Server(Manager):
-    def __init__(self, port):
+    def __init__(self, port, refPath, dataPath, dbFilename):
         try:
-            Manager.__init__(self)
+            Manager.__init__(self, refPath, dataPath, dbFilename)
             print "Manager initialisation done"
             self.start()
             self.__httpd = HTTPServer(("", port), Handler)
@@ -241,11 +249,17 @@ class Server(Manager):
         except:
             print "Serveur closed"
             self.stop()
-            traceback.print_exc(file=open("/home/pi/python/errlog.txt","a"))
-            if self.SIMU:
-                sys.exit(1)
-            else:
+            traceback.print_exc(file=open(os.path.join(refPath, "errlog.txt"), "a"))
+            if isRaspberry:
                 os.system("sudo reboot")
+            else:
+                sys.exit(1)
 
 if __name__ == '__main__':
-    server = Server(8888)
+    if isRaspberry:
+        args = sys.argv
+    else:
+        args = ["command", os.path.join(os.getcwd(), os.pardir), os.getcwd(), "db.ini"]
+    if len(args) != 4:
+        raise ValueError, "Unexpected number of arguments: %s" % str(args)
+    server = Server(8888, *args[1:])
