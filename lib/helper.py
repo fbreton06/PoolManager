@@ -24,15 +24,15 @@ class Debug(object):
             print deco * width + ' ' + name + ' ' + deco * width
 
     def TRACE(self, level, *args):
-        if self.debug_level >= level or self.debug_level == self.ERROR or self.debug_level == self.DEBUG:
+        if self.debug_level >= level or level == self.ERROR or level == self.DEBUG:
             if type(args[0]) in types.StringTypes:
                 message = args[0] % args[1:],
             else:
                 message =  ' '.join([str(x) for x in args]),
         if self.debug_level >= level:
             print message
-        if self.debug_level == self.ERROR or self.debug_level == self.DEBUG:
-            syslog.syslog(message)
+        if level == self.ERROR or level == self.DEBUG:
+            syslog.syslog(str(message))
 
     def TRACEBACK(self):
         raise NotImplemented
@@ -40,7 +40,7 @@ class Debug(object):
 if __name__ == "__main__":
     dbg = Debug(Debug.DETAIL)
     dbg.TAG(Debug.DEBUG, "test")
+    dbg.TRACE(Debug.ERROR, "LOG error: %s\n",  "test!")
     dbg.TRACE(Debug.DETAIL, "Format %s\n",  "OK!")
     dbg.TRACE(Debug.DETAIL, 25, 12, 23.0, "\n")
     dbg.TAG(Debug.INFO, "done", 10, '!')
-
