@@ -21,6 +21,8 @@ class Database(Debug, ConfigParser.ConfigParser):
         self.__filename = os.path.join(dataPath, dbFilename)
         self.__saved = os.path.join(dataPath, "saved")
         if not os.path.exists(self.__filename) and not os.path.exists(self.__filename + ".new"):
+            if os.path.isfile(self.__saved):
+                os.remove(self.__saved)
             # Need to be created
             for section in self.SECTIONS:
                 self.add_section(section)
@@ -30,12 +32,18 @@ class Database(Debug, ConfigParser.ConfigParser):
         else:
             self.lock.acquire()
             if os.path.isfile(self.__saved):
-                if os.path.isfile(self.__filename):
-                    os.remove(self.__filename)                
                 if os.path.isfile(self.__filename + ".new"):
+                    if os.path.isfile(self.__filename):
+                        os.remove(self.__filename)
                     os.rename(self.__filename + ".new", self.__filename)
-            elif os.path.isfile(self.__filename + ".new"):
-                os.remove(self.__filename + ".new")
+            else:
+                if os.path.isfile(self.__filename + ".new"):
+                    if os.path.isfile(self.__filename):
+                        os.remove(self.__filename + ".new")
+                    else:
+                        os.rename(self.__filename + ".new", self.__filename)
+            if not os.path.isfile(self.__filename):
+                raise ValueError, "Database file not found: %s" % self.__filename
             self.read(self.__filename)
             self.lock.release()
 
@@ -87,10 +95,10 @@ class Database(Debug, ConfigParser.ConfigParser):
         self.lock.acquire()
         if os.path.isfile(self.__saved):
             os.remove(self.__saved)
-        handle = open(self.__filename + ".new",'w')
+        handle = open(self.__filename + ".new", "w")
         self.write(handle)
         handle.close()
-        handle = open(__saved, "w")
+        handle = open(self.__saved, "w")
         handle.close()
         if os.path.isfile(self.__filename):
             os.remove(self.__filename)

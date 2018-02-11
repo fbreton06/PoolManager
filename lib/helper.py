@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import types
+import types, syslog, traceback
 
 class Debug(object):
     VERBOSITY = ("Unknown", "NONE", "INFO", "ERROR", "DETAIL", "DEBUG", "DUMP")
@@ -24,11 +24,18 @@ class Debug(object):
             print deco * width + ' ' + name + ' ' + deco * width
 
     def TRACE(self, level, *args):
-        if self.debug_level >= level:
+        if self.debug_level >= level or self.debug_level == self.ERROR or self.debug_level == self.DEBUG:
             if type(args[0]) in types.StringTypes:
-                print args[0] % args[1:],
+                message = args[0] % args[1:],
             else:
-                print ' '.join([str(x) for x in args]),
+                message =  ' '.join([str(x) for x in args]),
+        if self.debug_level >= level:
+            print message
+        if self.debug_level == self.ERROR or self.debug_level == self.DEBUG:
+            syslog.syslog(message)
+
+    def TRACEBACK(self):
+        raise NotImplemented
 
 if __name__ == "__main__":
     dbg = Debug(Debug.DETAIL)

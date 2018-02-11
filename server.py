@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, re, os, zipfile, traceback
+import sys, re, os, zipfile, traceback, syslog
 from subprocess import Popen, PIPE, STDOUT
 
 from BaseHTTPServer import HTTPServer
@@ -13,7 +13,7 @@ cgitb.enable()
 
 MAJOR = 0
 MINOR = 1
-BUILD = 2
+BUILD = 3
 
 try:
     process = Popen("cat /etc/issue", stdout=PIPE, shell=True, stderr=STDOUT)
@@ -43,40 +43,44 @@ class Handler(CGIHTTPRequestHandler):
         return text[:begin] + subtext + text[end:]
 
     def do_POST(self):
-        if self.headers["content-type"].startswith("multipart/form-data"):
-            index = 3
-            form = None
-        else:
-            form = FieldStorage(fp=self.rfile, headers=self.headers, environ={"REQUEST_METHOD":"POST","CONTENT_TYPE":self.headers["Content-Type"]})
-            ##for key in form.keys():
-            ##    print key
-            # Get page index
-            assert form.has_key("page"), "Missing hidden page key in form"
-            index = int(form["page"].value)
-            # Page changed detection
-            if form.has_key("next.x") and form["next.x"].value:
-                index += 1
-            if form.has_key("prev.x") and form["prev.x"].value:
-                index -= 1
-        # Read page
-        assert index >= 0 and index < len(self.PAGES), "Page index %d out of bounds [0 to %d[" % (index, len(self.PAGES))
-        # Get CGI path
-        self.cgiPath = os.path.dirname(self.translate_path(self.path))
-        handle = open(os.path.join(self.cgiPath, os.pardir, "html_templates", self.PAGES[index] + ".txt"), "rt")
-        html = handle.read()
-        handle.close()
-        # Replace field
-        html = html.replace("RESPATH", self.RESPATH)
-        # Do actions tha match with the current template
-        html = eval("self.%s(html, form)" % self.PAGES[index])
-        if self.manager.debug_level == self.manager.DEBUG:
-            html += "<br>Database:%s<br>" % self.manager.html(", ")
-        # Begin the response
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.send_header("Content-Length", str(html))
-        self.end_headers()
-        self.wfile.write(html)
+        try:
+            if self.headers["content-type"].startswith("multipart/form-data"):
+                index = 3
+                form = None
+            else:
+                form = FieldStorage(fp=self.rfile, headers=self.headers, environ={"REQUEST_METHOD":"POST","CONTENT_TYPE":self.headers["Content-Type"]})
+                ##for key in form.keys():
+                ##    print key
+                # Get page index
+                assert form.has_key("page"), "Missing hidden page key in form"
+                index = int(form["page"].value)
+                # Page changed detection
+                if form.has_key("next.x") and form["next.x"].value:
+                    index += 1
+                if form.has_key("prev.x") and form["prev.x"].value:
+                    index -= 1
+            # Read page
+            assert index >= 0 and index < len(self.PAGES), "Page index %d out of bounds [0 to %d[" % (index, len(self.PAGES))
+            # Get CGI path
+            self.cgiPath = os.path.dirname(self.translate_path(self.path))
+            handle = open(os.path.join(self.cgiPath, os.pardir, "html_templates", self.PAGES[index] + ".txt"), "rt")
+            html = handle.read()
+            handle.close()
+            # Replace field
+            html = html.replace("RESPATH", self.RESPATH)
+            # Do actions tha match with the current template
+            html = eval("self.%s(html, form)" % self.PAGES[index])
+            if self.manager.debug_level == self.manager.DEBUG:
+                html += "<br>Database:%s<br>" % self.manager.html(", ")
+            # Begin the response
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.send_header("Content-Length", str(html))
+            self.end_headers()
+            self.wfile.write(html)
+        except Exception as error:
+            syslog.syslog("do_POST error: %s", str(error))
+            raise error
 
     def status(self, html, form):
         html = html.replace("PHLEVEL", "%.1f" % self.manager.ph.current)
@@ -239,6 +243,7 @@ class Server(Manager):
             Manager.__init__(self, refPath, dataPath, dbFilename)
             print "Manager initialisation done"
             self.start()
+            syslog.syslog("PoolSurver %d%d%d startded for %s platform" % (MAJOR, MINOR, BUILD, ["other", "RaspberryPi"][isRaspberry]))
             self.__httpd = HTTPServer(("", port), Handler)
             self.__httpd.manager = self
             print "Serveur actif sur le port %d\nStarting server, use <Ctrl-C> to stop" % port
@@ -250,6 +255,7 @@ class Server(Manager):
             print "Serveur closed"
             self.stop()
             traceback.print_exc(file=open(os.path.join(refPath, "errlog.txt"), "a"))
+            syslog.syslog("Server closed")
             if isRaspberry:
                 os.system("sudo reboot")
             else:
