@@ -27,5 +27,11 @@ else
 fi
 cd $ref_path/PoolSurvey;
 echo "Start server...";
-python server.py $ref_path $data_path database.ini;
+gpio -g mode 16 up
+state=`gpio -g read 16`
+if [ "$state" = "0" ]; then
+	python server.py $ref_path $data_path database.ini;
+else
+	echo "Autostart disabled!"
+fi
 
