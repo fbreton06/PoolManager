@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import os, time, sys
 from subprocess import Popen, PIPE, STDOUT
-
+sys.path.append("lib")
 from helper import *
 
 try:

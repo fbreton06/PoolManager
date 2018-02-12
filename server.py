@@ -13,7 +13,7 @@ cgitb.enable()
 
 MAJOR = 0
 MINOR = 1
-BUILD = 3
+BUILD = 4
 
 try:
     process = Popen("cat /etc/issue", stdout=PIPE, shell=True, stderr=STDOUT)
@@ -25,7 +25,7 @@ except:
 class Handler(CGIHTTPRequestHandler):
     SUCCESS = "Success"
     RESPATH = "resources/"
-    PAGES = ("status", "switch", "program", "settings")
+    PAGES = ("status", "switch", "program", "settings", "debug")
     cgi_directories = ["/"]
     def __init__(self, request, client_address, server):
         self.manager = server.manager
@@ -60,7 +60,10 @@ class Handler(CGIHTTPRequestHandler):
                 if form.has_key("prev.x") and form["prev.x"].value:
                     index -= 1
             # Read page
-            assert index >= 0 and index < len(self.PAGES), "Page index %d out of bounds [0 to %d[" % (index, len(self.PAGES))
+            if index < 0:
+                index = len(self.PAGES) - 1
+            elif index >= len(self.PAGES):
+                index = 0
             # Get CGI path
             self.cgiPath = os.path.dirname(self.translate_path(self.path))
             handle = open(os.path.join(self.cgiPath, os.pardir, "html_templates", self.PAGES[index] + ".txt"), "rt")
@@ -70,8 +73,6 @@ class Handler(CGIHTTPRequestHandler):
             html = html.replace("RESPATH", self.RESPATH)
             # Do actions tha match with the current template
             html = eval("self.%s(html, form)" % self.PAGES[index])
-            if self.manager.debug_level == self.manager.DEBUG:
-                html += "<br>Database:%s<br>" % self.manager.html(", ")
             # Begin the response
             self.send_response(200)
             self.send_header("Content-type", "text/html")
@@ -81,6 +82,31 @@ class Handler(CGIHTTPRequestHandler):
         except Exception as error:
             syslog.syslog("do_POST error: %s", str(error))
             raise error
+
+    def debug(self, html, form):
+        if form.has_key("stat"):
+            html += "<br>TODO: Not yet implemented!<br>"
+        elif form.has_key("log"):
+            try:
+                process = Popen("cat /var/log/syslog", stdout=PIPE, shell=True, stderr=STDOUT)
+                result = process.communicate()
+                html += "<font color=\"black\" size=\"1pt\"><br>"
+                basename = os.path.basename(__file__)
+                lines = list()
+                for line in result[0].split("\n"):
+                    if basename in line:
+                        lines.append(line)
+                print len(lines)
+                if len(lines) > 100:
+                    html += "<br>".join(lines[-100:])
+                else:
+                    html += "<br>".join(lines)
+                html += "</font><br>"
+            except Exception as error:
+                html += "Failed to read \"/var/log/syslog\": %s" % str(error)
+        else:
+            html += "<br>Database:%s<br>" % self.manager.html(", ")
+        return html
 
     def status(self, html, form):
         html = html.replace("PHLEVEL", "%.1f" % self.manager.ph.current)
@@ -242,7 +268,6 @@ class Server(Manager):
         try:
             Manager.__init__(self, refPath, dataPath, dbFilename)
             print "Manager initialisation done"
-            self.start()
             syslog.syslog("PoolSurver %d%d%d startded for %s platform" % (MAJOR, MINOR, BUILD, ["other", "RaspberryPi"][isRaspberry]))
             self.__httpd = HTTPServer(("", port), Handler)
             self.__httpd.manager = self
@@ -256,7 +281,7 @@ class Server(Manager):
             self.stop()
             traceback.print_exc(file=open(os.path.join(refPath, "errlog.txt"), "a"))
             syslog.syslog("Server closed")
-            if isRaspberry:
+            if isRaspberry and self.info.isAutoStart():
                 os.system("sudo reboot")
             else:
                 sys.exit(1)

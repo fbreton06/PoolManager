@@ -5,8 +5,8 @@ from datetime import date
 
 from helper import Debug
 
-#verbosity = Debug.ERROR
-verbosity = Debug.DEBUG
+verbosity = Debug.ERROR
+#verbosity = Debug.DEBUG
 #verbosity = Debug.DUMP
 
 from helper import Debug
@@ -145,6 +145,7 @@ class Manager(MyClass, Debug, threading.Thread):
         self.default = Default(self.__emergency)
         self.lcdMenu = "default"
         self.TRACE(Debug.INFO, "Initialisation done (%s)\n", self.getVerbosity())
+        self.start()
 
     def __del__(self):
         GPIO.cleanup()
@@ -443,7 +444,6 @@ class Manager(MyClass, Debug, threading.Thread):
         while not self.__event.is_set():
             self.TAG(self.DEBUG, "%ds Tick" % self.REFRESH_TICK)
             self.__refresh()
-            self.TRACE(self.DEBUG, str(self))
             self.__event.wait(self.REFRESH_TICK)
         self.TRACE(Debug.DETAIL, "Manager thread is stopped\n")
 
@@ -631,7 +631,6 @@ class Manager(MyClass, Debug, threading.Thread):
 
 if __name__ == '__main__':
     try:
-        manager = Manager()
-        manager.start()
+        manager = Manager(os.getcwd(), os.getcwd(), "db.ini")
     except KeyboardInterrupt:
         manager.stop()

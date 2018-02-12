@@ -20,7 +20,10 @@
 				<td style="text-align: left;">
 				<input name="prev" type="image" src="RESPATHprev.png" value="Prev" />
 				</td>
-				<td></td>
+				<td style="width: 10%;"></td>
+				<td style="text-align: right;">
+				<input name="next" type="image" src="RESPATHnext.png" value="Next" />
+				</td>
 			</tr>
 			</table>
 			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">

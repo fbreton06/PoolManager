@@ -1,0 +1,43 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+		<title>Settings</title>
+		<link rel="stylesheet" href="style.css" type="text/css" />
+	</head>
+	<body>
+		<table style="width: 100%" border="0" cellpadding="1" cellspacing="1">
+		<tr>
+			<td style="text-align: center;">
+			<h1>Pool Survey: Debug</h1>
+			</td>
+		</tr>
+		</table>
+		<form method="post">
+			<input name="page" type="hidden" value="4" />
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+				<td style="text-align: left;">
+				<input name="prev" type="image" src="RESPATHprev.png" value="Prev" />
+				</td>
+				<td style="width: 10%;"></td>
+				<td style="text-align: right;">
+				<input name="next" type="image" src="RESPATHnext.png" value="Next" />
+				</td>
+			</tr>
+			</table>
+			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
+			<tr>
+			<td style="width: 30%;"></td>
+			<td style="text-align: center;">
+				<input type="submit" name="stat" value="Statistics" />
+			</td>
+			<td style="text-align: center;">
+				<input type="submit" name="log" value="Logs" />
+			</td>
+			<td style="width: 30%;"></td>
+			</tr>
+			</table>
+		</form>
+	</body>
+</html>

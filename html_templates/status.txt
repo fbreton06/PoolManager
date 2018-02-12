@@ -32,15 +32,18 @@
 			<input id="refresh" type="image" src="RESPATHhidden.png" value="0" />
 			<table style="width: 100%;" border="0" cellpadding="1" cellspacing="1">
 			<tr>
+				<td style="text-align: left;">
+				<input name="prev" type="image" src="RESPATHprev.png" value="Prev" />
+				</td>
 				<td></td>
+				<td style="width: 10%;"></td>
 				<td></td>
-<td></td><td></td>
 				<td style="text-align: right;">
 				<input name="next" type="image" src="RESPATHnext.png" value="Next" />
 				</td>
 			</tr>
 			<tr>
-<td></td>
+				<td></td>
 				<td style="text-align: left; vertical-align: center; width: 300px;">
 				<h2><img src="LEDPUMP">  Main water pump</h2>
 				<h2><img src="LEDROBOT">  Cleaner robot</h2>
@@ -63,7 +66,7 @@
 				<h2>TEMPERATUREºC</h2>
 				<h2>PRESSIONBar</h2>
 				</td>
-<td></td>
+				<td></td>
 			</tr>
 			</table>
 		</form>

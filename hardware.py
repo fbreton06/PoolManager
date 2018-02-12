@@ -1,12 +1,13 @@
 #!/usr/bin/python
 import os, time, sys, types, threading
-sys.path.append(os.path.join(os.path.pardir, "RRaspPY"))
 
-sys.path.append("lib")
-import ds18b20, smbus, button
+sys.path.append(os.path.join(os.path.pardir, "RRaspPY"))
+import smbus
 from Adafruit_ADS1x15 import ADS1115 # sudo pip install adafruit-ads1x15
 import RPi.GPIO as GPIO
 
+sys.path.append("lib")
+import ds18b20, button
 from helper import Debug
 
 # Raspberry 3 I/O Mapping
@@ -103,6 +104,7 @@ class Information(Debug):
     ORP_CAN_PIN = 1
     PH_CAN_PIN = 2
     PSI_CAN_PIN = 3
+    AUTO_START_GPIO_PIN = 16
     LIQUID_LEVEL_GPIO_PIN = 25
     LIQUID_MOVE_GPIO_PIN = 12
     LIQUID_MOVE_DEBOUNCE_TIME_S = 0.5
@@ -111,6 +113,7 @@ class Information(Debug):
         Debug.__init__(self)
         self.__can = ADS1115(0x49)
         self.__levelDebounce = None
+        GPIO.setup(self.AUTO_START_GPIO_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(self.LIQUID_LEVEL_GPIO_PIN, GPIO.IN)
         GPIO.add_event_detect(self.LIQUID_LEVEL_GPIO_PIN, GPIO.BOTH, callback=self.__levelDetect, bouncetime=debounce_ms)
         self.__liquidLevelState = GPIO.input(self.LIQUID_LEVEL_GPIO_PIN) == GPIO.HIGH
@@ -194,6 +197,9 @@ class Information(Debug):
         psi = (3 * psiMeasure - 1500) / 400
         # Conversion en PSI -> Bar
         return [psi * 0.06894745, psi][psiUnit]
+
+    def isAutoStart(self):
+        return GPIO.input(self.AUTO_START_GPIO_PIN) == GPIO.LOW
 
 class Command(Debug):
     RELAY_GPIO_PIN = {"pump":26, "robot":19, "light":13, "fill":23, "open":5, "close":6}
