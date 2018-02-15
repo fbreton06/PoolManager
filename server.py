@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, re, os, zipfile, traceback, syslog
+import sys, re, os, zipfile, traceback, syslog, threading
 from subprocess import Popen, PIPE, STDOUT
 
 from BaseHTTPServer import HTTPServer
@@ -31,7 +31,10 @@ class Handler(CGIHTTPRequestHandler):
         self.manager = server.manager
         CGIHTTPRequestHandler.__init__(self, request, client_address, server)
 
-    def buildSelectOptions(self, text, tag, items):
+    def __reboot(self):
+        os.system("sudo reboot")
+
+    def __buildSelectOptions(self, text, tag, items):
         begin = text.index(tag) + len(tag)
         begin = text.index("</optgroup>", begin) + len("</optgroup>")
         end = text.index("</select>", begin)
@@ -157,7 +160,7 @@ class Handler(CGIHTTPRequestHandler):
             self.manager.mode.program = not self.manager.mode.program
         html = html.replace("SCHEDCHECK", ["", "checked=\"checked\""][self.manager.mode.program])
         if self.manager.mode.program:
-            html = self.buildSelectOptions(html, "\"PumpList\">", self.manager.program.auto)
+            html = self.__buildSelectOptions(html, "\"PumpList\">", self.manager.program.auto)
         else:
             if form.has_key("pump+") or form.has_key("pump-"):
                 assert form.has_key("StartHr") and form.has_key("StartMn") and form.has_key("StopHr") and form.has_key("StopMn"), "Unexpected pump+ error"
@@ -166,7 +169,7 @@ class Handler(CGIHTTPRequestHandler):
                     self.manager.appendProgram("pumps", entry)
                 elif entry in self.manager.program.pumps:
                     self.manager.program.pumps.remove(entry)
-            html = self.buildSelectOptions(html, "\"PumpList\">", self.manager.program.pumps)
+            html = self.__buildSelectOptions(html, "\"PumpList\">", self.manager.program.pumps)
         # Manage robot list
         if form.has_key("robot+") or form.has_key("robot-"):
             assert form.has_key("StartHr") and form.has_key("StartMn") and form.has_key("StopHr") and form.has_key("StopMn"), "Unexpected pump+ error"
@@ -175,7 +178,7 @@ class Handler(CGIHTTPRequestHandler):
                 self.manager.appendProgram("robots", entry)
             elif entry in self.manager.program.robots:
                 self.manager.program.robots.remove(entry)
-        html = self.buildSelectOptions(html, "\"RobotList\">", self.manager.program.robots)
+        html = self.__buildSelectOptions(html, "\"RobotList\">", self.manager.program.robots)
         return html
 
     def settings(self, html, form):
@@ -238,8 +241,9 @@ class Handler(CGIHTTPRequestHandler):
                 zfile.extractall(extractPath)
                 zfile.close()
                 os.remove(filename)
-            except Exception, error:
-                status = "Upload failed: %s" % error
+            except Exception as error:
+                status = "Upload or extract failed: %s" % error
+                syslog.syslog("Update error: %s!" % status)
             if status == self.SUCCESS:
                 try:
                     hdl = open(os.path.join(extractPath, "PoolSurvey_new", os.path.basename(__file__)), "rt")
@@ -247,50 +251,66 @@ class Handler(CGIHTTPRequestHandler):
                     hdl.close()
                     major, minor, build = [int(x) for x in re.findall("\n\s*MAJOR\s*=\s*(\d+)\s*\n\s*MINOR\s*=\s*(\d+)\s*\n\s*BUILD\s*=\s*(\d+)\s*\n", text)[0]]
                     if MAJOR != major:
-                        db_ini = os.path.join(extractPath, "PoolSurvey_new", "database.ini")
+                        db_ini = os.path.join(extractPath, "PoolSurvey_new", self.manager.database.filename)
                         if os.path.isfile(db_ini):
                             os.remove(db_ini)
                     self.manager.stop()
                     html = html.replace("UPDATE_MESSAGE", "Update version (%d.%d.%d -> %d.%d.%d): %s!" % (MAJOR, MINOR, BUILD, major, minor, build, status))
-                    if isRaspberry:
-                        os.system("sudo reboot")
-                except Exception, error:
-                    status = "Unsupported file: %s" % error
-            if status != self.SUCCESS:
-                html = html.replace("UPDATE_MESSAGE", "Update version (%d.%d.%d): %s!" % (MAJOR, MINOR, BUILD, status))
+                    if isRaspberry and self.manager.info.isAutoStart():
+                        threading.Timer(2, self.__reboot).start()
+                except Exception as error:
+                    status = "Version or switch failed: %s" % error
+                    syslog.syslog("Update error: %s!" % status)
+            html = html.replace("UPDATE_MESSAGE", "Update version (%d.%d.%d): %s!" % (MAJOR, MINOR, BUILD, status))
         for field in fields:
             key1, key2 = field.split("_")
             html = html.replace(field.upper(), str(self.manager.__dict__[key1].__dict__[key2]))
         return html
 
-class Server(Manager):
-    def __init__(self, port, refPath, dataPath, dbFilename):
-        try:
-            Manager.__init__(self, refPath, dataPath, dbFilename)
-            print "Manager initialisation done"
-            syslog.syslog("PoolSurver %d%d%d startded for %s platform" % (MAJOR, MINOR, BUILD, ["other", "RaspberryPi"][isRaspberry]))
-            self.__httpd = HTTPServer(("", port), Handler)
-            self.__httpd.manager = self
-            print "Serveur actif sur le port %d\nStarting server, use <Ctrl-C> to stop" % port
-            self.__httpd.serve_forever()
-        except KeyboardInterrupt:
-            self.stop()
-            sys.exit(0)
-        except:
-            print "Serveur closed"
-            self.stop()
-            traceback.print_exc(file=open(os.path.join(refPath, "errlog.txt"), "a"))
-            syslog.syslog("Server closed")
-            if isRaspberry and self.info.isAutoStart():
-                os.system("sudo reboot")
-            else:
-                sys.exit(1)
+class Server(threading.Thread):
+    def __init__(self, port, manager):
+        threading.Thread.__init__(self)
+        self.echo("PoolSurver %d%d%d startded for %s platform" % (MAJOR, MINOR, BUILD, ["other", "RaspberryPi"][isRaspberry]))
+        self.__httpd = HTTPServer(("", port), Handler)
+        self.__httpd.manager = manager
+        self.echo("Serveur actif sur le port %d\nStarting server, use <Ctrl-C> to stop" % port)
+        self.start()
 
-if __name__ == '__main__':
+    def stop(self):
+        self.__httpd.shutdown()
+        self.echo("Serveur closed")
+
+    def echo(self, message):
+        syslog.syslog(str(message))
+        print message
+
+    def run(self):
+        self.__httpd.serve_forever()
+
+if __name__ == '__main__':  
     if isRaspberry:
         args = sys.argv
     else:
         args = ["command", os.path.join(os.getcwd(), os.pardir), os.getcwd(), "db.ini"]
     if len(args) != 4:
         raise ValueError, "Unexpected number of arguments: %s" % str(args)
-    server = Server(8888, *args[1:])
+    server = None
+    try:
+        manager = Manager(*args[1:])
+        server = Server(8888, manager)
+        manager.run()
+    except KeyboardInterrupt:
+        if server != None:
+            server.stop()
+        manager.stop()
+        sys.exit(0)
+    except Exception as error:
+        if server != None:
+            server.stop()
+        manager.stop()
+        traceback.print_exc(file=open(os.path.join(manager.refPath, "errlog.txt"), "a"))
+        syslog.syslog("Server closed: %s" % str(error))
+        if isRaspberry and manager.info.isAutoStart():
+            os.system("sudo reboot")
+        else:
+            sys.exit(1)

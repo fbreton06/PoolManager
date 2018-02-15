@@ -104,7 +104,7 @@ class Default(Debug, dict):
                 message = self[kind][-1]
         return message
 
-class Manager(MyClass, Debug, threading.Thread):
+class Manager(MyClass, Debug):
     class Fake: pass
     ONCE_BY_HOUR_TICK = 360 # 1h
     LCD_LIGHT_TICK = 30 # 5mn
@@ -118,8 +118,6 @@ class Manager(MyClass, Debug, threading.Thread):
     PH_PWM_PERCENT = 10
     CL_PWM_PERCENT = 10
     def __init__(self, refPath, dataPath, dbFilename):
-        threading.Thread.__init__(self)
-        self.__event = threading.Event()
         Debug.__init__(self, verbosity)
         self.refPath = refPath
         GPIO.cleanup()
@@ -144,8 +142,7 @@ class Manager(MyClass, Debug, threading.Thread):
         self.__today = date.today().day - 1
         self.default = Default(self.__emergency)
         self.lcdMenu = "default"
-        self.TRACE(Debug.INFO, "Initialisation done (%s)\n", self.getVerbosity())
-        self.start()
+        self.TRACE(Debug.DEBUG, "Initialisation done (Verbosity level: %s)\n", self.getVerbosity())
 
     def __del__(self):
         GPIO.cleanup()
@@ -390,6 +387,12 @@ class Manager(MyClass, Debug, threading.Thread):
             self.TRACE(Debug.DETAIL, "\t%s\n", program)
         return programs
 
+    def __emergency(self, kind, message):
+        oldState = self.state.pump
+        if oldState:
+            self.stopPump("Emergency: %s%s" % (kind, message))
+        return oldState
+
     def __databaseSave(self):
         for section in self.database.sections():
             for key, value in self.database.items(section):
@@ -401,64 +404,54 @@ class Manager(MyClass, Debug, threading.Thread):
             self.autoSaveTick = 0
             self.__databaseSave()
             # All seems to be OK, we can remove the previous version
-            backup = os.path.join(self.refPath, "PoolSurvey.bak")
+            backup = os.path.join(self.refPath, "PoolSurvey_bak")
             if os.path.exists(backup):
                 os.system("rm -frd %s" % backup)
         self.autoSaveTick += 1
 
-    def __refresh(self):
-        self.temp.current = self.info.getTemperature()
-        if self.temp.current > self.temp.max:
-            self.temp.max = self.temp.current
-        # Once by day
-        if self.__today != date.today().day:
-            self.__today = date.today().day
-            # Pressure checking
-            with self.__i2c.lock:
-                self.pressure.current = self.info.getPressure()
-            if self.pressure.current > self.pressure.critical:
-                self.default.add(self.default.IMPORTANT, "Pressure", "Too high! Clean filters urgently!")
-            elif self.pressure.current > self.pressure.max:
-                self.default.add(self.default.INFORMATION, "Pressure", "Is high. Think to clean filters")
-            # Pump auto-schedulling
-            self.program.auto = self.__computePumpScheduling(self.temp.max)
-            self.temp.max = -50.0
-        if self.updatePumpState():
-            with self.__i2c.lock:
-                self.ph.current = self.ph.offset + self.info.getPHLevel(self.temp.current)
-                self.orp.current = self.orp.offset + self.info.getORPLevel()
-            self.updateRobotState()
-            self.updatePHState()
-            self.updateORPState()
-        self.updateWaterFillingState()
-        # Saved each hour
-        self.__onceByHour(self.ONCE_BY_HOUR_TICK)
-        if self.lcdLightTimer > 0:
-            self.lcdLightTimer -= 1
-            if self.lcdLightTimer <= 0:
-                self.lcd.light(False)
-            elif self.lcdMenu == "default":
-                self.lcdDisplay()
-
     def run(self):
-        while not self.__event.is_set():
-            self.TAG(self.DEBUG, "%ds Tick" % self.REFRESH_TICK)
-            self.__refresh()
-            self.__event.wait(self.REFRESH_TICK)
-        self.TRACE(Debug.DETAIL, "Manager thread is stopped\n")
-
-    def start(self):
-        super(Manager, self).start()
-        self.TRACE(Debug.DETAIL, "Manager thread is started\n")
-
+        self.TRACE(Debug.DEBUG, "Manager is started\n")        
+        self.__running = True
+        while self.__running:
+            self.TAG(self.DETAIL, "%ds Tick" % self.REFRESH_TICK)
+            self.temp.current = self.info.getTemperature()
+            if self.temp.current > self.temp.max:
+                self.temp.max = self.temp.current
+            # Once by day
+            if self.__today != date.today().day:
+                self.__today = date.today().day
+                # Pressure checking
+                with self.__i2c.lock:
+                    self.pressure.current = self.info.getPressure()
+                if self.pressure.current > self.pressure.critical:
+                    self.default.add(self.default.IMPORTANT, "Pressure", "Too high! Clean filters urgently!")
+                elif self.pressure.current > self.pressure.max:
+                    self.default.add(self.default.INFORMATION, "Pressure", "Is high. Think to clean filters")
+                # Pump auto-schedulling
+                self.program.auto = self.__computePumpScheduling(self.temp.max)
+                self.temp.max = -50.0
+            if self.updatePumpState():
+                with self.__i2c.lock:
+                    self.ph.current = self.ph.offset + self.info.getPHLevel(self.temp.current)
+                    self.orp.current = self.orp.offset + self.info.getORPLevel()
+                self.updateRobotState()
+                self.updatePHState()
+                self.updateORPState()
+            self.updateWaterFillingState()
+            # Saved each hour
+            self.__onceByHour(self.ONCE_BY_HOUR_TICK)
+            if self.lcdLightTimer > 0:
+                self.lcdLightTimer -= 1
+                if self.lcdLightTimer <= 0:
+                    self.lcd.light(False)
+                elif self.lcdMenu == "default":
+                    self.lcdDisplay()
+            time.sleep(self.REFRESH_TICK)
+            raise ValueError, "Faked crash"
+        self.TRACE(Debug.DEBUG, "Manager is stopped\n")
+        
     def stop(self):
-        self.__event.set()
-
-    def __emergency(self, kind, message):
-        oldState = self.state.pump
-        if oldState:
-            self.stopPump("Emergency: %s%s" % (kind, message))
-        return oldState
+        self.__running = False
 
     def startPump(self, reason=""):
         self.TRACE(Debug.DETAIL, "Pump is started: %s\n", reason)
@@ -632,5 +625,6 @@ class Manager(MyClass, Debug, threading.Thread):
 if __name__ == '__main__':
     try:
         manager = Manager(os.getcwd(), os.getcwd(), "db.ini")
+        manager.run()
     except KeyboardInterrupt:
         manager.stop()

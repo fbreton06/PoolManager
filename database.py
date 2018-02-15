@@ -18,6 +18,8 @@ class Database(Debug, ConfigParser.ConfigParser):
         ConfigParser.ConfigParser.__init__(self)
         if not os.path.isdir(dataPath):
             raise ValueError, "Undefined path: %s" % dataPath
+        self.filename = dbFilename
+        self.path = dataPath
         self.__filename = os.path.join(dataPath, dbFilename)
         self.__saved = os.path.join(dataPath, "saved")
         if not os.path.exists(self.__filename) and not os.path.exists(self.__filename + ".new"):
