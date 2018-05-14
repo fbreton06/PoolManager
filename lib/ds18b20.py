@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 import os, time, sys
 from subprocess import Popen, PIPE, STDOUT
-sys.path.append("lib")
-from helper import *
 
 try:
     process = Popen("cat /etc/issue", stdout=PIPE, shell=True, stderr=STDOUT)
@@ -15,9 +13,8 @@ if not isRaspberry:
     sys.path.append(os.path.join(os.path.pardir, os.path.pardir, "RRaspPY"))
     import host
 
-class Temperature(Debug):
+class Temperature:
     def __init__(self, number=""):
-        Debug.__init__(self)
         self.__remote = False
         if number:
             if os.path.isfile(number):
@@ -47,9 +44,6 @@ class Temperature(Debug):
             if not os.path.isfile(self.__file):
                 raise ValueError, "1-Wire Probe not auto-detected!"
 
-    def __del__(self):
-        self.close()
-
     def read(self):
         if self.__remote:
             probe = host.Execute("open(\"%s\")" % self.__file)
@@ -61,11 +55,6 @@ class Temperature(Debug):
             result = probe.read()
             probe.close()
         return float(result.split("\n")[1].split("=")[-1]) / 1000
-
-    def close(self):
-        if self.__remoteHandle != None:
-            host.Execute("close(%s)", self.__remoteHandle)
-            host.RemoveHandle(self.__remoteHandle)
 
 if __name__ == "__main__":
     try:

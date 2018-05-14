@@ -1,21 +1,15 @@
 #!/usr/bin/python
-import sys, os, ConfigParser, threading, types
-sys.path.append(os.path.join(os.path.dirname(__file__), "lib"))
+import os, threading, types
+from ConfigParser import ConfigParser
 
-from helper import Debug
-
-class Database(Debug, ConfigParser.ConfigParser):
-    SECTIONS = {"mode":{"pump":2,"robot":2,"ph":2,"orp":2,"filling":2,"program":True},
-                "ph":{"current":0.0,"offset":0.0,"min":7.0,"idle":7.2,"max":8.0,"delay":0,"lbound":0.0,"ubound":14.0},
-                "orp":{"current":0,"offset":0,"min":350,"idle":650,"max":950,"delay":0,"lbound":-2000,"ubound":2000},
-                "temp":{"current":0.0,"winter":10.0,"max":-50.0},
-                "pressure":{"current":0.0,"max":1.3,"critical":1.5},
-                "state":{"pump":False,"robot":False,"ph":False,"orp":False,"filling":False,"light":False,"open":False},
-                "program":{"pumps":[],"robots":[]}}
+class Database(dict):
+    DEFAULT = {"mode":{"pump":1,"robot":2,"ph":3,"redox":3,"light":4,"curtain":4,"waterlevel":4,"pressure":3,"temperature":3,"panel":4},
+               "ph":{"offset":0.0,"idle":7.2,"injection":0,"wait":0,"reduction":0.2},
+               "redox":{"offset":0,"idle":650,"injection":0,"wait":0,"gain":25},
+               "temperature":{"winter":10.0,"max":-273.0},
+               "pressure":{"max":1.3,"critical":1.5}}
     def __init__(self, dataPath, dbFilename):
-        Debug.__init__(self)
-        self.lock = threading.RLock()
-        ConfigParser.ConfigParser.__init__(self)
+        self.__lock = threading.RLock()
         if not os.path.isdir(dataPath):
             raise ValueError, "Undefined path: %s" % dataPath
         self.filename = dbFilename
@@ -26,98 +20,95 @@ class Database(Debug, ConfigParser.ConfigParser):
             if os.path.isfile(self.__saved):
                 os.remove(self.__saved)
             # Need to be created
-            for section in self.SECTIONS:
-                self.add_section(section)
-                for key in self.SECTIONS[section]:
-                    super(Database, self).set(section, key, str(self.SECTIONS[section][key]))
+            for key, value in self.DEFAULT.items():
+                self[key] = dict()
+                for subKey, subValue in value.items():
+                    self[key][subKey] = subValue
             self.backup()
         else:
-            self.lock.acquire()
-            if os.path.isfile(self.__saved):
-                if os.path.isfile(self.__filename + ".new"):
-                    if os.path.isfile(self.__filename):
-                        os.remove(self.__filename)
-                    os.rename(self.__filename + ".new", self.__filename)
-            else:
-                if os.path.isfile(self.__filename + ".new"):
-                    if os.path.isfile(self.__filename):
-                        os.remove(self.__filename + ".new")
-                    else:
-                        os.rename(self.__filename + ".new", self.__filename)
-            if not os.path.isfile(self.__filename):
-                raise ValueError, "Database file not found: %s" % self.__filename
-            self.read(self.__filename)
-            self.lock.release()
+            self.restore()
 
     def __str__(self):
         return self.html("\n", "\n")
 
-    def html(self, subeol="<br>", eol="<br>"):
-        text = ""
-        for section in self.sections():
-            text += "%s[%s]%s" % (eol, section, eol)
-            for key, value in self.items(section):
-                text += "%s = %s%s" % (key, value, subeol)
-        return text
+    def __getattr__(self, item):
+        # Called only if item not already defined
+        try:
+            return self[item]
+        except:
+            raise AttributeError
 
     def __check(self, section, key, value=None):
         # Check that couple of section/key exists
-        if section not in self.sections():
-            raise ValueError, "Unexpected section \"%s\" not in %s" % (section, self.sections())
-        elif key not in self.options(section):
-            raise ValueError, "Unexpected key \"%s::%s\" not in %s" % (section, key, self.options(section))
+        if not self.has_key(section):
+            raise ValueError, "Unexpected section: \"%s\"" % section
+        if not self[section].has_key(key):
+            raise ValueError, "Unexpected key in section: \"%s::%s\"" % (section, key)
         if not value is None:
             # Check value type
-            if type(value) != type(self.SECTIONS[section][key]):
-                raise ValueError, "Unexpected value %s of \"%s::%s\": %s" % (type(value), section, key, type(self.SECTIONS[section][key]))
+            if type(value) != type(self.DEFAULT[section][key]):
+                raise ValueError, "Unexpected value %s of \"%s::%s\": %s" % (type(value), section, key, type(self.DEFAULT[section][key]))
 
-    def clear(self, section, key):
-        self.lock.acquire()
-        self.__check(section, key)
-        super(Database, self).set(section, key, str(type(self.SECTIONS[section][key])()))
-        self.lock.release()
-
-    def get(self, section, key):
-        self.lock.acquire()
-        self.__check(section, key)
-        if type(self.SECTIONS[section][key]) in types.StringTypes:
-            value = super(Database, self).get(section, key)
+    def __save(self, section, key, value):
+        if type(self.DEFAULT[section][key]) in types.StringTypes:
+            self[section][key] = str(value)
         else:
-            value = eval(super(Database, self).get(section, key))
-        self.lock.release()
-        return value
+            self[section][key] = type(self.DEFAULT[section][key])(value)
 
-    def set(self, section, key, value):
-        self.lock.acquire()
+    def html(self, subeol="<br>", eol="<br>"):
+        text = ""
+        for key, value in self.items():
+            text += "%s[%s]%s" % (eol, key, eol)
+            for subKey, subValue in value.items():
+                text += "%s = %s%s" % (subKey, subValue, subeol)
+        return text
+
+    def save(self, section, key, value):
         self.__check(section, key, value)
-        super(Database, self).set(section, key, str(value))
-        self.lock.release()
+        self.__lock.acquire()
+        self.__save(section, key, value)
+        self.__lock.release()
+
+    def restore(self):
+        self.__lock.acquire()
+        if os.path.isfile(self.__saved):
+            if os.path.isfile(self.__filename + ".new"):
+                if os.path.isfile(self.__filename):
+                    os.remove(self.__filename)
+                os.rename(self.__filename + ".new", self.__filename)
+        else:
+            if os.path.isfile(self.__filename + ".new"):
+                if os.path.isfile(self.__filename):
+                    os.remove(self.__filename + ".new")
+                else:
+                    os.rename(self.__filename + ".new", self.__filename)
+        if not os.path.isfile(self.__filename):
+            raise ValueError, "Database file not found: %s" % self.__filename
+        config = ConfigParser()
+        config.read(self.__filename)
+        for section in config.sections():
+            if self.DEFAULT.has_key(section):
+                self[section] = dict()
+                for key, value in config.items(section):
+                    if self.DEFAULT[section].has_key(key):
+                        self.__save(section, key, value)
+        self.__lock.release()
 
     def backup(self):
-        self.lock.acquire()
+        config = ConfigParser()
+        for key, value in self.items():
+            config.add_section(key)
+            for subKey, subValue in value.items():
+                config.set(key, subKey, subValue)
+        self.__lock.acquire()
         if os.path.isfile(self.__saved):
             os.remove(self.__saved)
         handle = open(self.__filename + ".new", "w")
-        self.write(handle)
+        config.write(handle)
         handle.close()
         handle = open(self.__saved, "w")
         handle.close()
         if os.path.isfile(self.__filename):
             os.remove(self.__filename)
         os.rename(self.__filename + ".new", self.__filename)
-        self.lock.release()
-
-if __name__ == '__main__':
-    try:
-        database = Database()
-        print database
-        database.set("ph", "current", 7.3)
-        print database.get("ph", "current")
-        database.set("state", "pump", True)
-        print database.get("state", "pump")
-        print database
-        assert type(database.get("program", "pumps")) == type([]), "error on list type"
-        database.set("state", "pumps", False)
-    except Exception as error:
-        database.backup()
-        print error
+        self.__lock.release()

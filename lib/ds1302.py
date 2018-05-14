@@ -3,11 +3,10 @@ import types, time, datetime
 import RPi.GPIO as GPIO
 from helper import *
 
-class Date(Debug):
+class Date:
     MONTH = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december")
     DAY = ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday")
     def __init__(self, year=1999, month=1, day=1, weekday=1):
-        Debug.__init__(self)
         if year < 2000:
             today = datetime.datetime.today()
             year = today.year
@@ -38,9 +37,8 @@ class Date(Debug):
             raise ValueError, "%s value %d is out of bound [%d,%d]" % (kind, value, min, max)
         return value
 
-class Time(Debug):
+class Time:
     def __init__(self, hour=-1, minute=0, seconde=0):
-        Debug.__init__(self)
         if hour < 0:
             today = datetime.datetime.today()
             hour = today.hour
@@ -63,9 +61,8 @@ class Time(Debug):
             raise ValueError, "%s value %d is out of bound [%d,%d]" % (kind, value, min, max)
         return value
 
-class DateTime(Debug):
+class DateTime:
     def __init__(self, year=1999, month=1, day=1, weekday=1, hour=0, minute=0, seconde=0):
-        Debug.__init__(self)
         self.date = Date(year, month, day, weekday)
         self.time = Time([hour, -1][year < 2000], minute, seconde)
 
@@ -77,7 +74,7 @@ class DateTime(Debug):
             return False
         return True
 
-class RTC(Debug):
+class RTC:
     SEC_REG = 0x00
     MIN_REG = 0x02
     HOUR_REG = 0x04
@@ -93,7 +90,6 @@ class RTC(Debug):
     RD_REG = 0x81
     RAM_ADDR_BASE = 0x40
     def __init__(self, scl_pin, io_pin, rst_pin):
-        Debug.__init__(self)
         self.__scl = scl_pin
         self.__io = io_pin
         self.__rst = rst_pin
@@ -126,22 +122,17 @@ class RTC(Debug):
             value = ((value / 10) << 4) | (value % 10)
         elif option == 2:
             value = ((value / 10) << 4) | (value % 10) | 0x80
-        self.TRACE(self.DEBUG, "WRITE(%d): 0x%02X\n", option, value)
         for bit in range(8):
             GPIO.output(self.__io, (value >> bit) & 1)
             time.sleep(0.0000002)
-            self.TRACE(self.DEBUG, (value >> bit) & 1)
             self.__pulse()
-        self.TRACE(self.DEBUG, "\n")
 
     def __read(self, option=0):
         GPIO.setup(self.__io, GPIO.IN)
         value = 0
         for bit in range(8):
             value |= (GPIO.input(self.__io) << bit)
-            self.TRACE(self.DEBUG, GPIO.input(self.__io))
             self.__pulse()
-        self.TRACE(self.DEBUG, "\n")
         if option == 1:
             value = 10 * ((value & 0x70) >> 4) + (value & 0x0F)
         elif option == 2:
@@ -149,7 +140,6 @@ class RTC(Debug):
                 value = (value & 0x0F) + (12 * ((value & 0x20) >> 5))
             else:
                 value = (value & 0x0F) + (10 * ((value & 0x30) >> 4))
-        self.TRACE(self.DEBUG, "READ(%d): 0x%02X\n", option, value)
         return value
 
     def __writeRam(self, address, value):
@@ -197,20 +187,17 @@ class RTC(Debug):
 
     def halt(self, enable=None):
         value = self.__readRegister(self.SEC_REG)
-        self.TRACE(self.DEBUG, "Halt %s\n", ["OFF", "ON"][(value & 0x80) == 0x80])
         if not enable is None:
             self.__writeRegister(self.SEC_REG, (value & 0x7F) | [0x00, 0x80][enable])
         return (value & 0x80) == 0x80
 
     def writeProtect(self, enable=None):
         value = self.__readRegister(self.CTRL_REG)
-        self.TRACE(self.DEBUG, "WrProtect %s\n", ["OFF", "ON"][(value & 0x80) == 0x80])
         if not enable is None:
             self.__writeRegister(self.CTRL_REG, [0x00, 0x80][enable])
         return (value & 0x80) == 0x80
 
     def setDateTime(self, dt, protect=False):
-        self.TRACE(self.DEBUG, "Set %s\n", dt)
         msb = self.__readRegister(self.SEC_REG) & 0x80
         self.__enable()
         self.__write(self.WR_REG | self.CLOCK_BURST_REG)
@@ -231,40 +218,31 @@ class RTC(Debug):
         minute = self.__read(1)
         hour = self.__read(2)
         date = self.__read(1)
-        self.debug_level = self.DEBUG
         month = self.__read(1)
-        self.debug_level = self.NONE
         day = self.__read(1)
         year = 2000 + self.__read(1)
         control = self.__read(0)
         self.__disable()
         dt = DateTime(year, month, date, hour, minute, second, day)
-        self.TRACE(self.DEBUG, "Get %s\n", dt)
         return dt
 
 if __name__ == "__main__":
     GPIO.setmode(GPIO.BCM)
     rtc = RTC(23, 24, 25)
-    rtc.debug_level = rtc.DEBUG
     if rtc.writeProtect(False):
         assert not rtc.writeProtect(), "Error: RTC still protected!"
     now = DateTime()
     if rtc.halt(False):
         assert not rtc.halt(), "Error: RTC still halted!"
-        rtc.TAG(rtc.INFO, "SET1")
         rtc.setDateTime(now, True)
-    rtc.debug_level = rtc.NONE
-    rtc.TAG(rtc.INFO, "GET1")
     dt = rtc.getDateTime()
     print "\n%s\n" % dt
     if dt != now:
         rtc.writeProtect(False)
-        rtc.TAG(rtc.INFO, "SET2")
         rtc.setDateTime(now, True)
         print "You set the date and time to:", now
     try:
         while True:
-            rtc.TAG(rtc.INFO, "GET")
             print rtc.getDateTime()
             time.sleep(0.5)
     except KeyboardInterrupt:

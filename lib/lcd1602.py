@@ -1,11 +1,9 @@
 #!/usr/bin/python
 import time, sys, smbus
-from helper import *
 
-class LCD(Debug):
+class LCD:
     def __init__(self, address, backlight=False, bus=None):
-        Debug.__init__(self)
-        if bus == None:
+        if bus is None:
             self.__bus = smbus.SMBus(1)
         else:
             self.__bus = bus
@@ -68,7 +66,7 @@ class LCD(Debug):
         self.__send_command(0x01)
 
     def light(self, backlight=None):
-        if backlight != None:
+        if backlight is not None:
             self.__backlight = bool(backlight)
             if self.__backlight:
                 self.__bus.write_byte(self.__address, 0x08)

@@ -6,6 +6,13 @@ from BaseHTTPServer import HTTPServer
 from CGIHTTPServer import CGIHTTPRequestHandler
 from cgi import FieldStorage
 
+try:
+    # sudo pip install matplotlib
+    import matplotlib.pyplot as plt
+    import numpy as np
+except:
+    np = None
+
 from manager import Manager
 
 import cgitb
@@ -13,7 +20,7 @@ cgitb.enable()
 
 MAJOR = 0
 MINOR = 1
-BUILD = 4
+BUILD = 5
 
 try:
     process = Popen("cat /etc/issue", stdout=PIPE, shell=True, stderr=STDOUT)
@@ -24,9 +31,9 @@ except:
 
 class Handler(CGIHTTPRequestHandler):
     SUCCESS = "Success"
-    RESPATH = "resources/"
+    RESPATH = "resources"  + os.path.sep
     PAGES = ("status", "switch", "program", "settings", "debug")
-    cgi_directories = ["/"]
+    cgi_directories = [os.path.sep]
     def __init__(self, request, client_address, server):
         self.manager = server.manager
         CGIHTTPRequestHandler.__init__(self, request, client_address, server)
@@ -88,7 +95,46 @@ class Handler(CGIHTTPRequestHandler):
 
     def debug(self, html, form):
         if form.has_key("stat"):
-            html += "<br>TODO: Not yet implemented!<br>"
+            html += "<br>\n"
+#             for day in range(len(self.manager.statistic)):
+
+#                 if len(self.manager.statistic[day]) > 0:
+#                     keys = self.manager.stats[day].keys()
+#                     break
+#             for key in keys:
+#                 if np is None:
+#                     html += "<h2>%s</h2><br>\n" % key
+#                     index = (self.manager.currentStats + 1) % len(self.manager.stats) # Select older
+#                     for day in range(len(self.manager.stats)):
+#                         if self.manager.stats[index] is not None:
+#                             if self.manager.stats[index].has_key(key):
+#                                 keyStats = self.manager.stats[index][key]
+#                                 if len(keyStats) > 0:
+#                                     line = ""
+#                                     if index == (self.manager.currentStats + 1) % len(self.manager.stats):
+#                                         for x in range(1, len(keyStats)+1):
+#                                             line += "%6.d " % x
+#                                         line += "<br>\n"
+#                                     for keyStat in keyStats:
+#                                         line += "%4.1f " % keyStat
+#                                     html += line + "<br><br>\n"
+#                         index = (index + 1) % len(self.manager.stats)
+#                 else:
+#                     resource = "%s%s.jpg" % (self.RESPATH, key)
+#                     index = (self.manager.currentStats + 1) % len(self.manager.stats) # Select older
+#                     for day in range(len(self.manager.stats)):
+#                         if self.manager.stats[index] is not None:
+#                             if self.manager.stats[index].has_key(key):
+#                                 keyStats = self.manager.stats[index][key]
+#                                 if len(keyStats) > 0:
+#                                     plt.plot(np.array(range(1, len(keyStats)+1)), np.array(keyStats))
+#                         index = (index + 1) % len(self.manager.stats)
+#                     plt.title(resource)
+#                     plt.legend()
+#                     plt.xlabel("Time: in step of %d second" % self.manager.REFRESH_TICK)
+#                     plt.ylabel(key)                        
+#                     plt.savefig(os.path.join(self.manager.refPath, "PoolSurvey", "cgi-bin", resource))
+#                     html += "<img src=\"%s\"><br>\n" % resource
         elif form.has_key("log"):
             try:
                 process = Popen("cat /var/log/syslog", stdout=PIPE, shell=True, stderr=STDOUT)
@@ -108,40 +154,40 @@ class Handler(CGIHTTPRequestHandler):
             except Exception as error:
                 html += "Failed to read \"/var/log/syslog\": %s" % str(error)
         else:
-            html += "<br>Database:%s<br>" % self.manager.html(", ")
+            html += "<br>Database:%s<br>" % self.manager.databse.html(", ")
         return html
 
     def status(self, html, form):
-        html = html.replace("PHLEVEL", "%.1f" % self.manager.ph.current)
-        html = html.replace("ORPLEVEL", "%d" % self.manager.orp.current)
-        html = html.replace("TEMPERATURE", "%.1f" % self.manager.temp.current)
-        html = html.replace("PRESSION", "%.1f" % self.manager.pressure.current)
-        html = html.replace("LEDPUMP", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.pump])
-        html = html.replace("LEDROBOT", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.robot])
-        html = html.replace("LEDPH", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.ph])
-        html = html.replace("LEDCL", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.orp])
-        html = html.replace("LEDFILL", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.filling])
-        html = html.replace("LEDLIGHT", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.light])
-        html = html.replace("LEDOPEN", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.state.open])
+        html = html.replace("PHLEVEL", "%.1f" % self.manager.ph.read())
+        html = html.replace("ORPLEVEL", "%d" % self.manager.redox.read())
+        html = html.replace("TEMPERATURE", "%.1f" % self.manager.temperature.read())
+        html = html.replace("PRESSION", "%.1f" % self.manager.pressure.read())
+        html = html.replace("LEDPUMP", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.pump.isSwitchOn()])
+        html = html.replace("LEDROBOT", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.robot.isSwitchOn()])
+        html = html.replace("LEDPH", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.ph.isSwitchOn()])
+        html = html.replace("LEDCL", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.redox.isSwitchOn()])
+        html = html.replace("LEDFILL", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.waterlevel.isSwitchOn()])
+        html = html.replace("LEDLIGHT", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.light.isSwitchOn()])
+        html = html.replace("LEDOPEN", self.RESPATH + "led_green%s.png" % ["-off", ""][self.manager.curtain.isSwitchOn()])
         html = html.replace("LEDDEFAULT", self.RESPATH + "led_red%s.png" % ["-off", ""][len(self.manager.default) > 0])
         return html
 
     def switch(self, html, form):
-        kinds = ("pump", "robot", "ph", "orp", "filling")
+        kinds = ("pump", "robot", "ph", "redox", "waterlevel")
         for kind in kinds:
             options = [False, False, False]
             if form.has_key(kind):
                 mode = int(form[kind].value)
-                self.manager.mode.__dict__[kind] = mode
+                eval("self.manager.%s.setMode(mode)" % kind)
             else:
-                mode = self.manager.mode.__dict__[kind]
+                mode = eval("self.manager.%s.getMode()" % kind)
             assert mode >= 0 and mode < 3, "Unexpected %s mode value: %d" % (kind, mode)
             options[mode] = True
             for idx in range(len(options)):
                 html = html.replace("SELECT" + kind.upper() + str(idx), ["","selected"][options[idx]])
         if form.has_key("light.x"):
-            self.manager.light(not self.manager.light())
-        html = html.replace("LIGHTSWITCH", self.RESPATH + "light%s.png" % ["OFF", "ON"][self.manager.light()])
+            self.manager.light.switchToggle()
+        html = html.replace("LIGHTSWITCH", self.RESPATH + "light%s.png" % ["OFF", "ON"][self.manager.light.isSwitchOn()])
         return html
 
     def program(self, html, form):
@@ -156,40 +202,49 @@ class Handler(CGIHTTPRequestHandler):
         html = html.replace("OPTIONMINUTE", minute)
         # TODO 2 il faudrait eviter la reinit de la combo a 00:00 a chaque POST
         # Manage pump list only in manual mode
-        if form.has_key("x") and form.has_key("y"):
-            self.manager.mode.program = not self.manager.mode.program
-        html = html.replace("SCHEDCHECK", ["", "checked=\"checked\""][self.manager.mode.program])
-        if self.manager.mode.program:
-            html = self.__buildSelectOptions(html, "\"PumpList\">", self.manager.program.auto)
+        if self.manager.temperature.isNoneMode():
+            self.manager.pump.fullAuto = False
+        else:
+            if form.has_key("x") and form.has_key("y"):
+                self.manager.pump.fullAuto = not self.manager.pump.fullAuto
+        html = html.replace("SCHEDCHECK", ["", "checked=\"checked\""][self.manager.pump.fullAuto])
+        if self.manager.pump.fullAuto:
+            html = self.__buildSelectOptions(html, "\"PumpList\">", self.manager.pump.autoPrograms)
         else:
             if form.has_key("pump+") or form.has_key("pump-"):
                 assert form.has_key("StartHr") and form.has_key("StartMn") and form.has_key("StopHr") and form.has_key("StopMn"), "Unexpected pump+ error"
                 entry = "%s:%s\t%s:%s" % (form["StartHr"].value, form["StartMn"].value, form["StopHr"].value, form["StopMn"].value)
                 if form.has_key("pump+"):
-                    self.manager.appendProgram("pumps", entry)
-                elif entry in self.manager.program.pumps:
-                    self.manager.program.pumps.remove(entry)
-            html = self.__buildSelectOptions(html, "\"PumpList\">", self.manager.program.pumps)
+                    self.manager.pump.appendProgram(entry)
+                elif entry in self.manager.pump.programs:
+                    self.manager.pump.programs.remove(entry)
+            html = self.__buildSelectOptions(html, "\"PumpList\">", self.manager.pump.programs)
         # Manage robot list
         if form.has_key("robot+") or form.has_key("robot-"):
             assert form.has_key("StartHr") and form.has_key("StartMn") and form.has_key("StopHr") and form.has_key("StopMn"), "Unexpected pump+ error"
             entry = "%s:%s\t%s:%s" % (form["StartHr"].value, form["StartMn"].value, form["StopHr"].value, form["StopMn"].value)
             if form.has_key("robot+"):
-                self.manager.appendProgram("robots", entry)
-            elif entry in self.manager.program.robots:
-                self.manager.program.robots.remove(entry)
-        html = self.__buildSelectOptions(html, "\"RobotList\">", self.manager.program.robots)
+                self.manager.robot.appendProgram(entry)
+            elif entry in self.manager.robot.programs:
+                self.manager.robot.programs.remove(entry)
+        html = self.__buildSelectOptions(html, "\"RobotList\">", self.manager.robot.programs)
         return html
 
     def settings(self, html, form):
-        fields = ("ph_min", "ph_idle", "ph_max", "orp_min", "orp_idle", "orp_max", "temp_winter", "pressure_max", "pressure_critical")
+        # TODO
+        # TODO
+        # TODO enlever min/max pour ph et orp et renomer ph_... + orp_... + temp_...
+        # TODO
+        # TODO
+        fields = ("ph_idle", "redox_idle", "temperature_winter", "pressure_max", "pressure_critical")
         if form:
             html = html.replace("UPDATE_MESSAGE", "Current version is: %d.%d.%d" % (MAJOR, MINOR, BUILD))
             if form.has_key("save"):
                 for field in fields:
                     if form.has_key(field):
                         key1, key2 = field.split("_")
-                        self.manager.__dict__[key1].__dict__[key2] = form[field].value
+                        eval("self.manager.%s.%s", (key1, key2)) = form[field].value
+            self.manager.database.backup()
         else:
             # Do an update
             status = self.SUCCESS
@@ -256,7 +311,7 @@ class Handler(CGIHTTPRequestHandler):
                             os.remove(db_ini)
                     self.manager.stop()
                     html = html.replace("UPDATE_MESSAGE", "Update version (%d.%d.%d -> %d.%d.%d): %s!" % (MAJOR, MINOR, BUILD, major, minor, build, status))
-                    if isRaspberry and self.manager.info.isAutoStart():
+                    if isRaspberry and self.manager.isAutoStart():
                         threading.Timer(2, self.__reboot).start()
                 except Exception as error:
                     status = "Version or switch failed: %s" % error
@@ -264,7 +319,7 @@ class Handler(CGIHTTPRequestHandler):
             html = html.replace("UPDATE_MESSAGE", "Update version (%d.%d.%d): %s!" % (MAJOR, MINOR, BUILD, status))
         for field in fields:
             key1, key2 = field.split("_")
-            html = html.replace(field.upper(), str(self.manager.__dict__[key1].__dict__[key2]))
+            html = html.replace(field.upper(), str(eval("self.manager.%s.%s" % (key1, key2))))
         return html
 
 class Server(threading.Thread):
@@ -295,22 +350,28 @@ if __name__ == '__main__':
     if len(args) != 4:
         raise ValueError, "Unexpected number of arguments: %s" % str(args)
     server = None
+    manager = None
     try:
         manager = Manager(*args[1:])
         server = Server(8888, manager)
-        manager.run()
+        manager.start()
     except KeyboardInterrupt:
-        if server != None:
+        if server is not None:
             server.stop()
-        manager.stop()
+        if manager is not None:
+            manager.stop()
         sys.exit(0)
     except Exception as error:
-        if server != None:
-            server.stop()
-        manager.stop()
-        traceback.print_exc(file=open(os.path.join(manager.refPath, "errlog.txt"), "a"))
         syslog.syslog("Server closed: %s" % str(error))
-        if isRaspberry and manager.info.isAutoStart():
-            os.system("sudo reboot")
-        else:
+        if server is not None:
+            server.stop()
+        if manager is None:
+            traceback.print_exc(file=open(os.path.join(os.getcwd(), "errlog.txt"), "a"))
             sys.exit(1)
+        else:
+            manager.stop()
+            traceback.print_exc(file=open(os.path.join(manager.refPath, "errlog.txt"), "a"))
+            if isRaspberry and manager.isAutoStart():
+                os.system("sudo reboot")
+            else:
+                sys.exit(1)

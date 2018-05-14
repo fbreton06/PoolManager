@@ -32,14 +32,10 @@
 				<h1>PH</h1>
 				</td>
 				<td style="text-align: right; vertical-align: center;">
-				<h2>Minimal </h2>
 				<h2>Ideal </h2>
-				<h2>Maximal </h2>
 				</td>
 				<td style="text-align: left; vertical-align: center;">
-				<h2><input name="ph_min" type="text" value="PH_MIN" /></h2>
 				<h2><input name="ph_idle" type="text" value="PH_IDLE" /></h2>
-				<h2><input name="ph_max" type="text" value="PH_MAX" /></h2>
 				</td>
 				<td style="text-align: center; vertical-align: center;">
 				<img src="RESPATHsonde.png">
@@ -47,17 +43,13 @@
 			</tr>
 			<tr>
 				<td style="text-align: right; vertical-align: center;">
-				<h1>ORP</h1>
+				<h1>REDOX</h1>
 				</td>
 				<td style="text-align: right; vertical-align: center;">
-				<h2>Minimal </h2>
 				<h2>Ideal </h2>
-				<h2>Maximal </h2>
 				</td>
 				<td style="text-align: left; vertical-align: center;">
-				<h2><input name="orp_min" type="text" value="ORP_MIN" /></h2>
-				<h2><input name="orp_idle" type="text" value="ORP_IDLE" /></h2>
-				<h2><input name="orp_max" type="text" value="ORP_MAX" /></h2>
+				<h2><input name="redox_idle" type="text" value="REDOX_IDLE" /></h2>
 				</td>
 				<td style="text-align: center; vertical-align: center;">
 				<img src="RESPATHsonde.png">
@@ -68,10 +60,10 @@
 				<h1>Temperature</h1>
 				</td>
 				<td style="text-align: right; vertical-align: center;">
-				<h2>Minimal </h2>
+				<h2>Hivernage </h2>
 				</td>
 				<td style="text-align: left; vertical-align: center;">
-				<h2><input name="temp_winter" type="text" value="TEMP_WINTER" /></h2>
+				<h2><input name="temperature_winter" type="text" value="TEMPERATURE_WINTER" /></h2>
 				</td>
 				<td style="text-align: center; vertical-align: center;">
 				<img src="RESPATHflocon.png">

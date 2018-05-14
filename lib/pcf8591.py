@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 import smbus
-from helper import *
 
-class CAN(Debug):
+class CAN:
     def __init__(self,  address, bus=None):
         Debug.__init__(self)
-        if bus == None:
+        if bus is None:
             self.__bus = smbus.SMBus(1)
         else:
             self.__bus = bus
@@ -18,9 +17,8 @@ class CAN(Debug):
             self.__bus.write_byte(self.__address, 0x40 + entry)
             # Dummy read to start conversion
             self.__bus.read_byte(self.__address)
-        except Exception, error:
-            print "Device address: 0x%2X" % self.__address
-            raise error
+        except Exception as error:
+            raise ValueError, "Error DevAddr=0x%2X: %s" % (self.__address, error)
         return self.__bus.read_byte(self.__address)
 
     def write(self, value):
@@ -28,9 +26,8 @@ class CAN(Debug):
             raise ErrorValue, "Bad byte value: %d" % value
         try:
             self.__bus.write_byte_data(self.__address, 0x40, value)
-        except Exception, error:
-            print "Device address: 0x%2X" % self.__address
-            raise error
+        except Exception as error:
+            raise ValueError, "Error DevAddr=0x%2X: %s" % (self.__address, error)
 
 if __name__ == "__main__":
     try:
