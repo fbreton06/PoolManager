@@ -1,2 +1,2 @@
-# PoolSurvey
-Rapberry PI projecyt to manage pool
+# PoolManager
+Rapberry PI project to manage pool
